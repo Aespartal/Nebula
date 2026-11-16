@@ -20,6 +20,7 @@ export interface QbTorrent {
 }
 
 export class QBittorrent {
+  /** Cookie de sesión tal cual la manda qBittorrent: «SID=…» (4.x) o «QBT_SID_<puerto>=…» (5.x). */
   private sid: string | null = null;
   /** true si qBittorrent no pide sesión (p. ej. «omitir autenticación para clientes en localhost»). */
   private open = false;
@@ -36,7 +37,7 @@ export class QBittorrent {
       // qBittorrent rechaza peticiones cuyo Origin/Referer no coincida con su propio host (protección CSRF).
       Referer: this.base, Origin: new URL(this.base).origin,
     };
-    if (this.sid) headers.Cookie = `SID=${this.sid}`;
+    if (this.sid) headers.Cookie = this.sid;
     let body: string | undefined;
     if (form) { body = new URLSearchParams(form).toString(); headers["Content-Type"] = "application/x-www-form-urlencoded"; }
     try {
@@ -54,7 +55,7 @@ export class QBittorrent {
     const text = (await r.text()).trim();
     // qBittorrent 5.x: login correcto = 204 (o 200 «Ok.» en la 4.x) con la cookie SID; credenciales malas = 401 (o 200 «Fails.»).
     if (r.status === 401) throw new QbError("auth", "Usuario o contraseña incorrectos", 401);
-    const cookie = r.headers.getSetCookie().map((c) => /(?:^|;\s*)SID=([^;]+)/.exec(c)?.[1]).find(Boolean);
+    const cookie = r.headers.getSetCookie().map((c) => /^\s*((?:QBT_)?SID[A-Za-z0-9_]*=[^;]+)/.exec(c)?.[1]).find(Boolean);
     const ok = r.status === 204 || (r.status === 200 && text === "Ok.");
     if (ok && cookie) { this.sid = cookie; return; }
     // Autenticación omitida para localhost: no hay cookie, pero la API responde sin sesión.

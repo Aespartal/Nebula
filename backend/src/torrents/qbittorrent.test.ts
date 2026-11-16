@@ -140,9 +140,9 @@ test("qBittorrent 5.x: login 204 con cookie y 401 si la contraseña es mala", as
       if (req.url === "/api/v2/auth/login") {
         const b = new URLSearchParams(Buffer.concat(chunks).toString());
         if (b.get("password") !== "buena") { res.statusCode = 401; return res.end("Unauthorized"); }
-        sid = "abc"; res.statusCode = 204; res.setHeader("set-cookie", "SID=abc; HttpOnly; path=/"); return res.end();
+        sid = "abc"; res.statusCode = 204; res.setHeader("set-cookie", "QBT_SID_8083=abc; HttpOnly; path=/"); return res.end();
       }
-      if (!sid || !/SID=abc/.test(req.headers.cookie ?? "")) { res.statusCode = 401; return res.end("Unauthorized"); }
+      if (!sid || !/QBT_SID_8083=abc/.test(req.headers.cookie ?? "")) { res.statusCode = 401; return res.end("Unauthorized"); }
       if (req.url === "/api/v2/app/version") return res.end("v5.3.0");
       res.statusCode = 404; res.end();
     });

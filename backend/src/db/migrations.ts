@@ -63,6 +63,35 @@ const migrations: string[] = [
   );
   CREATE INDEX idx_media_streams_file ON media_streams(file_id);
   `,
+  `
+  CREATE TABLE users (
+    id INTEGER PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('admin','user')),
+    created_at INTEGER NOT NULL
+  );
+  -- Solo se guarda el hash (SHA-256) del token: una copia de la base de datos no sirve para suplantar sesiones.
+  CREATE TABLE sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL,
+    last_seen INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    user_agent TEXT
+  );
+  CREATE INDEX idx_sessions_user ON sessions(user_id);
+  CREATE TABLE watch_progress (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    file_id INTEGER NOT NULL REFERENCES media_files(id) ON DELETE CASCADE,
+    position_s REAL NOT NULL DEFAULT 0,
+    duration_s REAL,
+    watched INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, file_id)
+  );
+  CREATE INDEX idx_progress_recent ON watch_progress(user_id, updated_at DESC);
+  `,
 ];
 
 export function migrate(db: Database.Database) {

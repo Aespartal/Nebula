@@ -16,8 +16,19 @@ Producción en un solo puerto: `npm run build` y arranca el backend; si existe `
 
 También puedes añadir carpetas desde la propia app (Ajustes). Requisitos: Node 22+, `ffprobe` en el PATH (o `FFPROBE_PATH`).
 
-Variables: `PORT`, `HOST` (por defecto `127.0.0.1` hasta tener autenticación), `DATA_DIR`, `MOVIES_DIR`, `SERIES_DIR`,
-`FFMPEG_PATH`, `FFPROBE_PATH`, `HLS_DIR` (temporales de conversión), `MAX_TRANSCODES` (sesiones simultáneas, 3 por defecto).
+Variables: `PORT`, `HOST` (por defecto `127.0.0.1`; `0.0.0.0` para la red local), `DATA_DIR`, `MOVIES_DIR`, `SERIES_DIR`,
+`FFMPEG_PATH`, `FFPROBE_PATH`, `HLS_DIR` (temporales de conversión), `MAX_TRANSCODES` (sesiones simultáneas, 3 por defecto),
+`TRUST_PROXY=1` (cuando haya un proxy inverso delante).
+
+## Cuentas y seguridad
+
+- **Primer arranque**: al abrir Nebula se pide crear la cuenta de administrador. Solo funciona mientras no exista ningún usuario.
+- **Cuentas**: el administrador crea más cuentas desde Ajustes. Cada una tiene su propio progreso («Seguir viendo», visto/no visto). Todas las cuentas ven todas las carpetas; añadir carpetas y gestionar cuentas es solo del administrador.
+- **Contraseñas**: `scrypt` con sal propia (viene con Node, no hay que compilar nada). Mínimo 8 caracteres.
+- **Sesiones**: cookie `HttpOnly` + `SameSite=Lax` (y `Secure` en HTTPS); en la base de datos solo se guarda el hash del token. Caducan a los 30 días sin uso, se revocan al cerrar sesión, al cambiar la contraseña y al borrar la cuenta. Como el vídeo va por el mismo origen, `<video>` y hls.js envían la cookie solos: no hacen falta URLs firmadas.
+- **Protección**: toda la API (vídeo incluido) exige sesión salvo `/api/health` y el acceso; bloqueo temporal tras 5 intentos fallidos; las peticiones que cambian datos desde otro origen se rechazan (CSRF); no hay CORS.
+- **Antes de abrirlo a Internet** hace falta HTTPS (fase 6): sin cifrado, la contraseña y la cookie viajan en claro.
+- Si pierdes la contraseña del único administrador: borra la fila de `users` de `data/nebula.db` y vuelve a abrir Nebula para repetir el alta.
 
 ## Reproducción y conversión
 

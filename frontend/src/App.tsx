@@ -1,7 +1,8 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 import { LinkButton } from "./components/Button";
 import { Layout } from "./components/Layout";
 import { PageHeading } from "./components/PageHeading";
+import Home from "./pages/Home";
 import Movies from "./pages/Movies";
 import Series from "./pages/Series";
 import SeriesDetail from "./pages/SeriesDetail";
@@ -24,7 +25,7 @@ export function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<Navigate to="/peliculas" replace />} />
+        <Route index element={<Home />} />
         <Route path="peliculas" element={<Movies />} />
         <Route path="series" element={<Series />} />
         <Route path="series/:id" element={<SeriesDetail />} />

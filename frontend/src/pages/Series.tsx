@@ -37,7 +37,8 @@ export default function Series() {
               {list.map((s) => (
                 <li key={s.id}>
                   <TitleCard to={`/series/${s.id}`} title={s.title} kind="Serie"
-                    meta={`${plural(s.seasons, "temporada", "temporadas")} · ${plural(s.episodes, "episodio", "episodios")}`} />
+                    watched={s.watchedEpisodes === s.episodes && s.episodes > 0} progress={s.episodes ? s.watchedEpisodes / s.episodes : 0}
+                    meta={`${plural(s.seasons, "temporada", "temporadas")} · ${plural(s.episodes, "episodio", "episodios")}${s.watchedEpisodes ? ` · ${plural(s.watchedEpisodes, "visto", "vistos")}` : ""}`} />
                 </li>
               ))}
             </ul>

@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import type { DecisionReason, PlaybackDecision } from "@nebula/shared";
 import { detectCapabilities } from "../lib/capabilities";
-import { postJson } from "../lib/useApi";
+import { postJson, sendJson } from "../lib/useApi";
 import { Button } from "./Button";
 
 const ERRORS: Record<string, string> = {
@@ -35,11 +35,19 @@ interface Props {
   onEnded?: () => void;
   /** Se avisa cuando el navegador no pudo reproducir en directo y se pasa a convertir solo. */
   onDirectFailed?: () => void;
+  /** Segundo desde el que empezar (retomar donde se dejó). */
+  startAt?: number;
+  /** Para que la página pueda mover el vídeo (p. ej. «empezar desde el principio»). */
+  videoRef?: RefObject<HTMLVideoElement | null>;
 }
 
-export function VideoPlayer({ fileId, audioIdx, forceTranscode, setForceTranscode, onDecision, onEnded, onDirectFailed }: Props) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const resumeRef = useRef(0); // posición a retomar al cambiar de modo, pista o sesión
+const SAVE_EVERY_MS = 10_000;
+
+export function VideoPlayer({ fileId, audioIdx, forceTranscode, setForceTranscode, onDecision, onEnded, onDirectFailed, startAt = 0, videoRef: outerRef }: Props) {
+  const ownRef = useRef<HTMLVideoElement>(null);
+  const videoRef = outerRef ?? ownRef;
+  const lastSaveRef = useRef(0);
+  const resumeRef = useRef(startAt); // posición a retomar al cambiar de modo, pista o sesión
   const retriesRef = useRef(0);
   const decisionRef = useRef<PlaybackDecision | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -48,6 +56,36 @@ export function VideoPlayer({ fileId, audioIdx, forceTranscode, setForceTranscod
   const [error, setError] = useState<string | null>(null);
   const cb = useRef({ onDecision, onEnded, onDirectFailed });
   cb.current = { onDecision, onEnded, onDirectFailed };
+
+  // Va antes del efecto principal: al salir, este limpia primero y aún ve el vídeo cargado.
+  // --- Progreso: se guarda cada 10 s, al pausar, al terminar y al cerrar la pestaña. ---
+  const progressBody = () => {
+    const v = videoRef.current;
+    if (!v || v.readyState < 1 || !Number.isFinite(v.currentTime)) return null; // aún no hay vídeo cargado: no machacar lo guardado
+    const dur = decisionRef.current?.durationS ?? (Number.isFinite(v.duration) ? v.duration : null);
+    return { positionS: v.ended && dur ? dur : v.currentTime, durationS: dur };
+  };
+  const saveProgress = () => {
+    const body = progressBody();
+    if (!body) return;
+    lastSaveRef.current = Date.now();
+    void sendJson("PUT", `/api/progress/${fileId}`, body);
+  };
+  useEffect(() => {
+    const beacon = () => {
+      const body = progressBody();
+      if (body) navigator.sendBeacon(`/api/progress/${fileId}`, new Blob([JSON.stringify(body)], { type: "application/json" }));
+    };
+    const onHidden = () => { if (document.visibilityState === "hidden") beacon(); };
+    window.addEventListener("pagehide", beacon);
+    document.addEventListener("visibilitychange", onHidden);
+    return () => {
+      window.removeEventListener("pagehide", beacon);
+      document.removeEventListener("visibilitychange", onHidden);
+      beacon(); // al salir de la página dentro de la app
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileId]);
 
   useEffect(() => {
     const video = videoRef.current!;
@@ -151,7 +189,9 @@ export function VideoPlayer({ fileId, audioIdx, forceTranscode, setForceTranscod
         onWaiting={() => setBusy(true)}
         onCanPlay={() => setBusy(false)}
         onPlaying={() => { setBusy(false); retriesRef.current = 0; }}
-        onEnded={() => cb.current.onEnded?.()}
+        onTimeUpdate={() => { if (Date.now() - lastSaveRef.current >= SAVE_EVERY_MS) saveProgress(); }}
+        onPause={saveProgress}
+        onEnded={() => { saveProgress(); cb.current.onEnded?.(); }}
       >
         Tu navegador no admite vídeo HTML5.
       </video>

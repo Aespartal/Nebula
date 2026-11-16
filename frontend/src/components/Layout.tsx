@@ -1,8 +1,10 @@
 import { useEffect, useRef } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { useAuth } from "../lib/auth";
 import { Icon, type IconName } from "./Icon";
 
-const ITEMS: { to: string; label: string; icon: IconName }[] = [
+const ITEMS: { to: string; label: string; icon: IconName; end?: boolean }[] = [
+  { to: "/", label: "Inicio", icon: "home", end: true },
   { to: "/peliculas", label: "Películas", icon: "film" },
   { to: "/series", label: "Series", icon: "tv" },
   { to: "/ajustes", label: "Ajustes", icon: "sliders" },
@@ -18,6 +20,7 @@ export function Wordmark() {
 
 export function Layout() {
   const { pathname } = useLocation();
+  const { user, logout } = useAuth();
   const firstRender = useRef(true);
 
   // Al cambiar de página, el foco va al título: lectores de pantalla y teclado se sitúan solos.
@@ -42,7 +45,7 @@ export function Layout() {
             <ul className="flex gap-2">
               {ITEMS.map((i) => (
                 <li key={i.to}>
-                  <NavLink to={i.to}
+                  <NavLink to={i.to} end={i.end}
                     className={({ isActive }) =>
                       `flex min-h-12 items-center gap-2 border-b-4 px-4 font-bold ${isActive ? "border-accent text-accent" : "border-transparent hover:border-line"}`}>
                     <Icon name={i.icon} className="size-5" />
@@ -52,6 +55,13 @@ export function Layout() {
               ))}
             </ul>
           </nav>
+          <div className="flex items-center gap-3">
+            <span className="hidden max-w-40 truncate text-muted sm:inline" title="Sesión iniciada como">{user?.username}</span>
+            <button type="button" onClick={logout}
+              className="min-h-12 rounded-md border-2 border-line px-4 font-bold hover:bg-surface">
+              Salir
+            </button>
+          </div>
         </div>
       </header>
 
@@ -62,10 +72,10 @@ export function Layout() {
 
       <nav aria-label="Principal"
         className="fixed inset-x-0 bottom-0 z-10 border-t border-rule bg-bg pb-[env(safe-area-inset-bottom)] md:hidden">
-        <ul className="grid grid-cols-3">
+        <ul className="grid grid-cols-4">
           {ITEMS.map((i) => (
             <li key={i.to}>
-              <NavLink to={i.to}
+              <NavLink to={i.to} end={i.end}
                 className={({ isActive }) =>
                   `flex min-h-[4.5rem] flex-col items-center justify-center gap-1 border-t-4 font-bold ${isActive ? "border-accent text-accent" : "border-transparent text-muted"}`}>
                 <Icon name={i.icon} />

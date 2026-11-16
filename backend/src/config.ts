@@ -2,8 +2,10 @@ import path from "node:path";
 
 export const config = {
   port: Number(process.env.PORT ?? 3000),
-  // Por seguridad solo localhost hasta tener auth (fase 4). Para LAN: HOST=0.0.0.0
+  // Por defecto solo localhost. Para la red local: HOST=0.0.0.0 (ya hay cuentas, pero sin HTTPS aún: fase 6).
   host: process.env.HOST ?? "127.0.0.1",
+  // Pon TRUST_PROXY=1 cuando haya un proxy inverso delante (fase 6) para que la IP y el protocolo sean los reales.
+  trustProxy: process.env.TRUST_PROXY === "1",
   dataDir: path.resolve(process.env.DATA_DIR ?? "./data"),
   ffprobePath: process.env.FFPROBE_PATH ?? "ffprobe",
   // Bootstrap opcional de bibliotecas al arrancar

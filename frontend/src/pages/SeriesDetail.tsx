@@ -1,12 +1,13 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { SeriesDetail as SeriesDetailData } from "@nebula/shared";
 import { Icon } from "../components/Icon";
 import { ErrorBox, Loading } from "../components/States";
+import { Button } from "../components/Button";
 import { plural } from "../lib/format";
 import { useFocusWhen } from "../lib/useFocusWhen";
 import { usePageTitle } from "../lib/usePageTitle";
-import { useApi } from "../lib/useApi";
+import { sendJson, useApi } from "../lib/useApi";
 
 export default function SeriesDetail() {
   const { id } = useParams();
@@ -14,6 +15,19 @@ export default function SeriesDetail() {
   usePageTitle(data?.title);
   const h1 = useRef<HTMLHeadingElement>(null);
   useFocusWhen(h1, !!data);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+
+  const all = data?.seasons.flatMap((s) => s.episodes) ?? [];
+  const allWatched = all.length > 0 && all.every((e) => e.watched);
+
+  async function markAll() {
+    setBusy(true);
+    const r = await sendJson("POST", `/api/series/${id}/watched`, { watched: !allWatched });
+    setBusy(false);
+    if (r.ok) { setNote(allWatched ? "Serie marcada como no vista." : "Serie marcada como vista."); reload(); }
+    else setNote("No se pudo cambiar el estado de la serie.");
+  }
 
   return (
     <>
@@ -27,6 +41,12 @@ export default function SeriesDetail() {
           <h1 ref={h1} tabIndex={-1} className="mb-6 font-display text-4xl font-semibold leading-none tracking-tight outline-none md:text-5xl">
             {data.title}
           </h1>
+          <div className="mb-6">
+            <Button variant="secondary" onClick={markAll} disabled={busy} className="w-full sm:w-auto">
+              {allWatched ? "Marcar toda la serie como no vista" : "Marcar toda la serie como vista"}
+            </Button>
+            <p role="status" className="mt-2 min-h-7 text-muted">{note}</p>
+          </div>
           <div className="max-w-3xl">
             {data.seasons.map((season, i) => (
               <details key={season.id} open={i === 0} className="group border-t border-rule last:border-b">
@@ -34,6 +54,7 @@ export default function SeriesDetail() {
                   <span className="font-display text-2xl font-semibold">Temporada {season.number}</span>
                   <span className="flex items-center gap-2 text-muted">
                     {plural(season.episodes.length, "episodio", "episodios")}
+                    {season.episodes.some((e) => e.watched) && ` · ${plural(season.episodes.filter((e) => e.watched).length, "visto", "vistos")}`}
                     <Icon name="chevron" className="size-6 motion-safe:transition-transform group-open:rotate-180" />
                   </span>
                 </summary>
@@ -52,6 +73,11 @@ export default function SeriesDetail() {
                         ) : (
                           <span className="flex-1 pl-2 font-bold">Episodio {ep.number}</span>
                         )}
+                        <span className="shrink-0 text-sm font-bold text-muted">
+                          {ep.watched ? (
+                            <span className="inline-flex items-center gap-1"><Icon name="check" className="size-4" /> Visto</span>
+                          ) : ep.progress > 0.02 ? `${Math.round(ep.progress * 100)} %` : null}
+                        </span>
                         <Icon name="play" className="size-5 shrink-0 text-accent" />
                       </Link>
                     </li>

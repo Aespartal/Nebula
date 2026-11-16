@@ -9,6 +9,8 @@ import { detectEncoders } from "./ffmpeg/encoders.js";
 import { HlsSessions } from "./ffmpeg/hls-sessions.js";
 import { registerAuth } from "./auth/plugin.js";
 import { registerAuthRoutes } from "./auth/routes.js";
+import { SubtitleCache } from "./subtitles.js";
+import { registerSubtitleRoutes } from "./subtitles-routes.js";
 import { registerPlaybackRoutes } from "./playback-routes.js";
 import { registerProgressRoutes } from "./progress-routes.js";
 import { registerRoutes } from "./routes.js";
@@ -44,6 +46,7 @@ if (encoders.profiles.length > 0) {
   app.log.warn("FFmpeg no está disponible: solo se podrá reproducir en directo lo que el navegador admita. Ejecuta `npm run doctor`.");
 }
 registerPlaybackRoutes(app, db, hls, encoders, config.maxTranscodeSessions);
+registerSubtitleRoutes(app, db, new SubtitleCache(path.join(config.dataDir, "subtitles"), config.ffmpegPath));
 
 // Si existe el build del frontend (npm run build), se sirve desde el mismo puerto.
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../frontend/dist");

@@ -118,7 +118,7 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
     const f = db.prepare(`
       SELECT f.id, f.rel_path AS relPath, f.size_bytes AS sizeBytes, f.container,
              f.duration_s AS durationS, f.bitrate,
-             m.title AS movieTitle, m.year AS movieYear,
+             m.title AS movieTitle, m.year AS movieYear, m.overview AS movieOverview, e.overview AS epOverview,
              e.number AS epNumber, e.title AS epTitle,
              se.number AS seasonNumber, s.id AS seriesId, s.title AS seriesTitle
       FROM media_files f
@@ -156,6 +156,7 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
       next,
       relPath: f.relPath, sizeBytes: f.sizeBytes, container: f.container,
       durationS: f.durationS, bitrate: f.bitrate, streams,
+      overview: (isEpisode ? f.epOverview : f.movieOverview) ?? null,
       resume: getProgress(db, req.user!.id, f.id),
     };
   });

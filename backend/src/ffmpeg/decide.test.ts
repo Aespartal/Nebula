@@ -11,11 +11,11 @@ const chrome: ClientCapabilities = {
 };
 const v = (o: Partial<MediaStreamInfo> = {}): MediaStreamInfo => ({
   idx: 0, kind: "video", codec: "h264", profile: "High", pixFmt: "yuv420p", width: 1920, height: 1080,
-  channels: null, language: null, title: null, isDefault: true, isForced: false, isExternal: false, ...o,
+  channels: null, language: null, title: null, isDefault: true, isForced: false, isExternal: false, textual: false, ...o,
 });
 const a = (o: Partial<MediaStreamInfo> = {}): MediaStreamInfo => ({
   idx: 1, kind: "audio", codec: "aac", profile: null, pixFmt: null, width: null, height: null,
-  channels: 2, language: "spa", title: null, isDefault: true, isForced: false, isExternal: false, ...o,
+  channels: 2, language: "spa", title: null, isDefault: true, isForced: false, isExternal: false, textual: false, ...o,
 });
 const run = (over: Record<string, unknown>) =>
   decidePlayback({ ext: ".mp4", container: "mov,mp4,m4a,3gp,3g2,mj2", bitrate: 5_000_000, streams: [v(), a()], caps: chrome, ...over });

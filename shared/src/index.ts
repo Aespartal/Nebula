@@ -24,6 +24,8 @@ export interface MediaStreamInfo {
   isDefault: boolean;
   isForced: boolean;
   isExternal: boolean;
+  /** Solo subtítulos: true si son de texto (se pueden mostrar); false si son de imagen (PGS, DVD). */
+  textual: boolean;
 }
 
 export interface NextEpisode { fileId: number; label: string }
@@ -42,6 +44,8 @@ export interface MediaFileInfo {
   durationS: number | null;
   bitrate: number | null;
   streams: MediaStreamInfo[];
+  /** Sinopsis (de TMDB, si está configurado). */
+  overview: string | null;
   /** Estado de visionado del usuario actual. */
   resume: WatchProgress;
 }

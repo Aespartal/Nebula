@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { DecisionReason, PlaybackDecision } from "@nebula/shared";
 import { detectCapabilities } from "../lib/capabilities";
+import type { SubtitleTrack } from "../lib/tracks";
 import { postJson, sendJson } from "../lib/useApi";
 import { Button } from "./Button";
 
@@ -39,11 +40,17 @@ interface Props {
   startAt?: number;
   /** Para que la página pueda mover el vídeo (p. ej. «empezar desde el principio»). */
   videoRef?: RefObject<HTMLVideoElement | null>;
+  /** Subtítulos de texto disponibles y el que se muestra (null = ninguno). */
+  subtitles?: SubtitleTrack[];
+  subtitleIdx?: number | null;
+  onSubtitleState?: (s: "loading" | "ready" | "error") => void;
+  /** El usuario cambió el subtítulo desde el menú del propio reproductor. */
+  onSubtitleChange?: (idx: number | null) => void;
 }
 
 const SAVE_EVERY_MS = 10_000;
 
-export function VideoPlayer({ fileId, audioIdx, forceTranscode, setForceTranscode, onDecision, onEnded, onDirectFailed, startAt = 0, videoRef: outerRef }: Props) {
+export function VideoPlayer({ fileId, audioIdx, forceTranscode, setForceTranscode, onDecision, onEnded, onDirectFailed, startAt = 0, videoRef: outerRef, subtitles = [], subtitleIdx = null, onSubtitleState, onSubtitleChange }: Props) {
   const ownRef = useRef<HTMLVideoElement>(null);
   const videoRef = outerRef ?? ownRef;
   const lastSaveRef = useRef(0);
@@ -54,8 +61,41 @@ export function VideoPlayer({ fileId, audioIdx, forceTranscode, setForceTranscod
   const [busy, setBusy] = useState(true);
   const [mode, setMode] = useState<"direct" | "transcode" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const cb = useRef({ onDecision, onEnded, onDirectFailed });
-  cb.current = { onDecision, onEnded, onDirectFailed };
+  const cb = useRef({ onDecision, onEnded, onDirectFailed, onSubtitleState, onSubtitleChange, subtitleIdx });
+  cb.current = { onDecision, onEnded, onDirectFailed, onSubtitleState, onSubtitleChange, subtitleIdx };
+
+  // --- Subtítulos: una pista <track> por subtítulo; solo se descarga la que se muestra. ---
+  const trackEls = useRef(new Map<number, HTMLTrackElement>());
+  useEffect(() => {
+    for (const [idx, el] of trackEls.current) {
+      const want = idx === subtitleIdx ? "showing" : "disabled";
+      if (el.track.mode !== want) el.track.mode = want;
+    }
+    if (subtitleIdx === null) return;
+    const el = trackEls.current.get(subtitleIdx);
+    if (el && el.readyState === 2) cb.current.onSubtitleState?.("ready"); // ya estaba cargada
+    else if (el && el.readyState !== 3) cb.current.onSubtitleState?.("loading");
+  }, [subtitleIdx, subtitles]);
+  useEffect(() => {
+    const list = videoRef.current?.textTracks;
+    if (!list) return;
+    // El menú «CC» nativo también puede cambiar la pista: se refleja en nuestro selector.
+    const onChange = () => {
+      let showing: number | null = null;
+      for (const [idx, el] of trackEls.current) if (el.track.mode === "showing") showing = idx;
+      if (showing !== cb.current.subtitleIdx) cb.current.onSubtitleChange?.(showing);
+    };
+    list.addEventListener("change", onChange);
+    return () => list.removeEventListener("change", onChange);
+  }, [videoRef]);
+  const trackRef = (idx: number) => (el: HTMLTrackElement | null) => {
+    if (!el) { trackEls.current.delete(idx); return; }
+    trackEls.current.set(idx, el);
+    const ok = () => { if (cb.current.subtitleIdx === idx) cb.current.onSubtitleState?.("ready"); };
+    const bad = () => { if (cb.current.subtitleIdx === idx) cb.current.onSubtitleState?.("error"); };
+    el.addEventListener("load", ok); el.addEventListener("error", bad);
+    return () => { el.removeEventListener("load", ok); el.removeEventListener("error", bad); trackEls.current.delete(idx); };
+  };
 
   // Va antes del efecto principal: al salir, este limpia primero y aún ve el vídeo cargado.
   // --- Progreso: se guarda cada 10 s, al pausar, al terminar y al cerrar la pestaña. ---
@@ -193,6 +233,10 @@ export function VideoPlayer({ fileId, audioIdx, forceTranscode, setForceTranscod
         onPause={saveProgress}
         onEnded={() => { saveProgress(); cb.current.onEnded?.(); }}
       >
+        {subtitles.map((t) => (
+          <track key={t.idx} ref={trackRef(t.idx)} kind="subtitles" label={t.label} srcLang={t.lang}
+            src={`/api/subtitles/${fileId}/${t.idx}.vtt`} />
+        ))}
         Tu navegador no admite vídeo HTML5.
       </video>
 

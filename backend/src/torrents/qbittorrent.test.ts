@@ -101,11 +101,11 @@ test("envía Origin y Referer propios (la protección CSRF de qBittorrent los ex
 });
 
 test("una respuesta que no es «Fails.» ni «Ok.» se enseña, no se llama contraseña incorrecta", async () => {
-  const server = http.createServer((_req, res) => { res.statusCode = 401; res.end("Unauthorized"); });
+  const server = http.createServer((_req, res) => { res.statusCode = 502; res.end("Bad Gateway"); });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   try {
     const qb = new QBittorrent({ url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, username: "a", password: "b" });
-    await assert.rejects(qb.login(), (e: QbError) => e.code === "http" && /401/.test(e.message) && /Unauthorized/.test(e.message));
+    await assert.rejects(qb.login(), (e: QbError) => e.code === "http" && /502/.test(e.message) && /Bad Gateway/.test(e.message));
   } finally { server.close(); }
 });
 
@@ -122,11 +122,35 @@ test("autenticación omitida para localhost: login 204 sin cookie y la API respo
   } finally { server.close(); }
 });
 
-test("un 204 en el login con la API cerrada sigue siendo un error", async () => {
+test("un 204 sin cookie y con la API cerrada es un error de sesión", async () => {
   const server = http.createServer((req, res) => { res.statusCode = req.url === "/api/v2/auth/login" ? 204 : 403; res.end(); });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   try {
     const qb = new QBittorrent({ url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, username: "x", password: "y" });
-    await assert.rejects(() => qb.login(), (e) => e instanceof QbError && e.code === "http");
+    await assert.rejects(() => qb.login(), (e) => e instanceof QbError && e.code === "auth");
+  } finally { server.close(); }
+});
+
+test("qBittorrent 5.x: login 204 con cookie y 401 si la contraseña es mala", async () => {
+  let sid = "";
+  const server = http.createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => {
+      if (req.url === "/api/v2/auth/login") {
+        const b = new URLSearchParams(Buffer.concat(chunks).toString());
+        if (b.get("password") !== "buena") { res.statusCode = 401; return res.end("Unauthorized"); }
+        sid = "abc"; res.statusCode = 204; res.setHeader("set-cookie", "SID=abc; HttpOnly; path=/"); return res.end();
+      }
+      if (!sid || !/SID=abc/.test(req.headers.cookie ?? "")) { res.statusCode = 401; return res.end("Unauthorized"); }
+      if (req.url === "/api/v2/app/version") return res.end("v5.3.0");
+      res.statusCode = 404; res.end();
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  try {
+    assert.equal(await new QBittorrent({ url, username: "admin", password: "buena" }).version(), "v5.3.0");
+    await assert.rejects(() => new QBittorrent({ url, username: "admin", password: "mala" }).login(), (e) => e instanceof QbError && e.code === "auth");
   } finally { server.close(); }
 });

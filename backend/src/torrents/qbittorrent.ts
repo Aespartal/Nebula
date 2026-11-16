@@ -52,25 +52,26 @@ export class QBittorrent {
     const r = await this.raw("POST", "auth/login", { username: this.o.username, password: this.o.password });
     if (r.status === 403) throw new QbError("banned", "qBittorrent ha bloqueado temporalmente esta dirección por demasiados intentos fallidos", 403);
     const text = (await r.text()).trim();
-    // Con la autenticación omitida para localhost el login puede devolver 204 y ninguna cookie:
-    // en ese caso se comprueba si la API responde sin sesión.
-    if (r.status === 204 || (r.status === 200 && text === "Ok." && !r.headers.getSetCookie().length)) {
+    // qBittorrent 5.x: login correcto = 204 (o 200 «Ok.» en la 4.x) con la cookie SID; credenciales malas = 401 (o 200 «Fails.»).
+    if (r.status === 401) throw new QbError("auth", "Usuario o contraseña incorrectos", 401);
+    const cookie = r.headers.getSetCookie().map((c) => /(?:^|;\s*)SID=([^;]+)/.exec(c)?.[1]).find(Boolean);
+    const ok = r.status === 204 || (r.status === 200 && text === "Ok.");
+    if (ok && cookie) { this.sid = cookie; return; }
+    // Autenticación omitida para localhost: no hay cookie, pero la API responde sin sesión.
+    if (ok) {
       const probe = await this.raw("GET", "app/version");
       if (probe.ok) { this.open = true; return; }
+      throw new QbError("auth", "qBittorrent no devolvió la cookie de sesión y la API no responde sin ella");
     }
-    // Solo «Fails.» es un rechazo de credenciales; cualquier otra respuesta se enseña tal cual para poder diagnosticarla.
-    if (r.status !== 200) throw new QbError("http", `qBittorrent respondió ${r.status} al iniciar sesión: «${text.slice(0, 120)}»`, r.status);
-    if (text !== "Ok.") throw new QbError("auth", text === "Fails." ? "Usuario o contraseña incorrectos" : `Respuesta inesperada al iniciar sesión: «${text.slice(0, 120)}»`, r.status);
-    const cookie = r.headers.getSetCookie().map((c) => /(?:^|;\s*)SID=([^;]+)/.exec(c)?.[1]).find(Boolean);
-    if (!cookie) throw new QbError("auth", "qBittorrent no devolvió la cookie de sesión");
-    this.sid = cookie;
+    if (r.status === 200) throw new QbError("auth", text === "Fails." ? "Usuario o contraseña incorrectos" : `Respuesta inesperada al iniciar sesión: «${text.slice(0, 120)}»`, r.status);
+    throw new QbError("http", `qBittorrent respondió ${r.status} al iniciar sesión: «${text.slice(0, 120)}»`, r.status);
   }
 
   /** Petición autenticada: si la sesión ha caducado (403), inicia sesión otra vez y reintenta una vez. */
   private async call(method: "GET" | "POST", path: string, form?: Record<string, string>): Promise<Response> {
     if (!this.sid && !this.open) await this.login();
     let r = await this.raw(method, path, form);
-    if (r.status === 403) { await this.login(); r = await this.raw(method, path, form); }
+    if ((r.status === 403 || r.status === 401) && !this.open) { await this.login(); r = await this.raw(method, path, form); }
     if (!r.ok) throw new QbError("http", `qBittorrent respondió ${r.status} en ${path}`, r.status);
     return r;
   }

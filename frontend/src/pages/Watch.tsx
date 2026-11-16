@@ -6,10 +6,10 @@ import { Icon } from "../components/Icon";
 import { Wordmark } from "../components/Layout";
 import { ErrorBox, Loading } from "../components/States";
 import { VideoPlayer, describeReason } from "../components/VideoPlayer";
-import { formatDuration, formatSize, plural } from "../lib/format";
+import { formatClock, formatDuration, formatSize, plural } from "../lib/format";
 import { useFocusWhen } from "../lib/useFocusWhen";
 import { usePageTitle } from "../lib/usePageTitle";
-import { useApi } from "../lib/useApi";
+import { sendJson, useApi } from "../lib/useApi";
 
 export default function Watch() {
   const { id } = useParams();
@@ -25,8 +25,21 @@ function WatchView({ id }: { id: string }) {
   const [fellBack, setFellBack] = useState(false);
   const [audioIdx, setAudioIdx] = useState<number | undefined>(undefined);
   const nextRef = useRef<HTMLAnchorElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [startedOver, setStartedOver] = useState(false);
+  const [watched, setWatched] = useState<boolean | null>(null);
   const h1 = useRef<HTMLHeadingElement>(null);
   useFocusWhen(h1, !!info);
+
+  // Se retoma solo si había avanzado algo y aún no estaba casi al final.
+  const resumeAt = info && info.resume.positionS >= 10 &&
+    (!info.resume.durationS || info.resume.positionS / info.resume.durationS < 0.9) ? info.resume.positionS : 0;
+  const isWatched = watched ?? info?.resume.watched ?? false;
+
+  async function toggleWatched() {
+    const r = await sendJson<{ watched: boolean }>("POST", `/api/progress/${id}/watched`, { watched: !isWatched });
+    if (r.ok) setWatched(r.data.watched);
+  }
 
   const backTo = info?.seriesId ? `/series/${info.seriesId}` : "/peliculas";
   const backLabel = info?.seriesId ? "Volver a la serie" : "Volver a películas";
@@ -49,6 +62,7 @@ function WatchView({ id }: { id: string }) {
               fileId={info.id} audioIdx={audioIdx}
               forceTranscode={forceTranscode} setForceTranscode={setForceTranscode}
               onDecision={setDecision}
+              startAt={resumeAt} videoRef={videoRef}
               onDirectFailed={() => setFellBack(true)}
               onEnded={() => nextRef.current?.focus()}
             />
@@ -56,6 +70,22 @@ function WatchView({ id }: { id: string }) {
             <div className="mt-5">
               {info.subtitle && <p className="font-bold text-muted">{info.subtitle}</p>}
               <h1 ref={h1} tabIndex={-1} className="font-display text-3xl font-semibold leading-tight outline-none md:text-4xl">{info.title}</h1>
+            </div>
+
+            {resumeAt > 0 && !startedOver && (
+              <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-muted">
+                Retomando en {formatClock(resumeAt)}.
+                <button type="button" className="min-h-12 font-bold text-text underline underline-offset-4"
+                  onClick={() => { if (videoRef.current) videoRef.current.currentTime = 0; setStartedOver(true); }}>
+                  Empezar desde el principio
+                </button>
+              </p>
+            )}
+
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+              <Button variant="secondary" aria-pressed={isWatched} onClick={toggleWatched}>
+                <Icon name="check" className="size-5" /> {isWatched ? "Vista · quitar marca" : "Marcar como vista"}
+              </Button>
             </div>
 
             {info.next && (

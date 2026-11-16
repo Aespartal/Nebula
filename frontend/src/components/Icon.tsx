@@ -5,6 +5,8 @@ const PATHS = {
   back: <path d="M15 5l-7 7 7 7" />,
   play: <path d="M8 5v14l11-7z" fill="currentColor" />,
   search: <><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4.5 4.5" /></>,
+  home: <><path d="M4 11l8-7 8 7" /><path d="M6 10v10h12V10" /></>,
+  check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
   chevron: <path d="M6 9l6 6 6-6" />,
 } as const;
 

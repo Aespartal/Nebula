@@ -14,7 +14,15 @@ export interface HlsJob {
   profile: ProfileName;
 }
 
-export const segmentCount = (durationS: number, segDur: number) => Math.max(1, Math.ceil(durationS / segDur - 1e-6));
+/** Un resto final menor que esto se absorbe en el segmento anterior: con tan pocos fotogramas la GPU no consigue arrancar. */
+const MIN_TAIL_S = 0.5;
+
+export function segmentCount(durationS: number, segDur: number): number {
+  const full = Math.floor(durationS / segDur + 1e-6);
+  const rest = durationS - full * segDur;
+  if (full >= 1 && rest < MIN_TAIL_S) return full;
+  return Math.max(1, full + (rest > 1e-3 ? 1 : 0));
+}
 
 /** null = sin reescalar. Nunca se amplía. */
 export function targetSize(w: number | null, h: number | null, maxHeight: number): { w: number; h: number } | null {

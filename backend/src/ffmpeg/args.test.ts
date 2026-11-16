@@ -8,6 +8,16 @@ const job = (o: Partial<HlsJob> = {}): HlsJob => ({
 });
 const val = (args: string[], flag: string) => args[args.indexOf(flag) + 1];
 
+test("un resto final minúsculo se absorbe en el segmento anterior", () => {
+  assert.equal(segmentCount(60.01, 6), 10);
+  assert.equal(segmentCount(60.49, 6), 10);
+  assert.equal(segmentCount(60.6, 6), 11);
+  assert.equal(segmentCount(0.3, 6), 1);
+  const lines = buildPlaylist(60.01, 6).split("\n").filter((l) => l.startsWith("#EXTINF"));
+  assert.equal(lines.length, 10);
+  assert.equal(lines[9], "#EXTINF:6.010,");
+});
+
 test("segmentCount redondea hacia arriba y no deja segmentos vacíos", () => {
   assert.equal(segmentCount(60, 6), 10);
   assert.equal(segmentCount(60.5, 6), 11);

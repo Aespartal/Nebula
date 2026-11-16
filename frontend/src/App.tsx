@@ -2,6 +2,7 @@ import { Route, Routes } from "react-router-dom";
 import { LinkButton } from "./components/Button";
 import { Layout } from "./components/Layout";
 import { PageHeading } from "./components/PageHeading";
+import Downloads from "./pages/Downloads";
 import Home from "./pages/Home";
 import Movies from "./pages/Movies";
 import Series from "./pages/Series";
@@ -31,6 +32,7 @@ export function App() {
         <Route path="series" element={<Series />} />
         <Route path="series/:id" element={<SeriesDetail />} />
         <Route path="ajustes" element={<Settings />} />
+        <Route path="descargas" element={<Downloads />} />
         <Route path="sistema" element={<System />} />
         <Route path="*" element={<NotFound />} />
       </Route>

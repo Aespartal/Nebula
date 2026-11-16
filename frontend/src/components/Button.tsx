@@ -11,7 +11,7 @@ const variants = {
 
 type Variant = keyof typeof variants;
 
-export function Button({ variant = "primary", className = "", ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant }) {
+export function Button({ variant = "primary", className = "", ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & RefAttributes<HTMLButtonElement> & { variant?: Variant }) {
   return <button type="button" className={`${base} ${variants[variant]} ${className}`} {...rest} />;
 }
 

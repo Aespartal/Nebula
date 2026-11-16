@@ -77,6 +77,26 @@ function parse(buf: Buffer, i: number, depth = 0): [Bencoded, number] {
   throw new Error("bencode");
 }
 
+/** Tamaño total del contenido de un `.torrent` (un archivo o la suma de varios); null si no se puede saber. */
+export function torrentSize(data: Buffer): number | null {
+  try {
+    const [root] = parse(data, 0);
+    const info = (root as { [k: string]: Bencoded }).info as { [k: string]: Bencoded } | undefined;
+    if (!info || Buffer.isBuffer(info) || Array.isArray(info) || typeof info === "number") return null;
+    if (typeof info.length === "number") return info.length;
+    if (Array.isArray(info.files)) {
+      let total = 0;
+      for (const f of info.files) {
+        const len = (f as { [k: string]: Bencoded }).length;
+        if (typeof len !== "number") return null;
+        total += len;
+      }
+      return total;
+    }
+    return null;
+  } catch { return null; }
+}
+
 /** Valida un archivo `.torrent` y devuelve su hash (SHA-1 del diccionario `info`, en hexadecimal). */
 export function torrentHash(data: Buffer): string {
   const bad = () => new TorrentError("invalid_torrent", "El archivo no es un .torrent válido");

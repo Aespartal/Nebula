@@ -175,3 +175,39 @@ export interface StorageLibrary {
   /** Estado del disco donde está la carpeta; null si no se puede leer (carpeta no accesible). */
   disk: { totalBytes: number; freeBytes: number } | null;
 }
+
+// --- Descargas (torrents) ---
+export type DownloadKind = "movies" | "series";
+export type DownloadState = "downloading" | "stalled" | "queued" | "checking" | "moving" | "seeding" | "paused" | "error" | "unknown" | "missing";
+export interface DownloadItem {
+  hash: string;
+  name: string;
+  state: DownloadState;
+  /** 0 a 1. */
+  progress: number;
+  /** Descargado por completo (aunque ahora esté compartiendo o parado). */
+  done: boolean;
+  sizeBytes: number;
+  downloadedBytes: number;
+  speedDown: number;
+  speedUp: number;
+  etaS: number | null;
+  kind: DownloadKind;
+  addedBy: string | null;
+  addedAt: number;
+  /** Cuándo terminó y Nebula lo envió a la biblioteca; null si aún no. */
+  completedAt: number | null;
+}
+export interface DownloadsStatus {
+  /** ¿Están TORRENT_USER y TORRENT_PASS en el .env? */
+  configured: boolean;
+  connected: boolean;
+  version?: string;
+  /** "unreachable" (apagado o dirección mal), "auth" (usuario o contraseña) o "unsupported". */
+  error?: "unreachable" | "auth" | "unsupported";
+  message?: string;
+  /** Espacio libre en el disco de descargas, si el cliente lo informa. */
+  freeBytes: number | null;
+  /** Margen que se exige libre antes de aceptar una descarga nueva. */
+  minFreeBytes: number;
+}

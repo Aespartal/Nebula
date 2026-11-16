@@ -30,6 +30,12 @@ export const config = {
   tmdbImageBase: process.env.TMDB_IMAGE_BASE,
   tmdbLanguage: process.env.TMDB_LANGUAGE ?? "es-ES",
   probeConcurrency: Number(process.env.PROBE_CONCURRENCY ?? 4),
+  // Descargas: interfaz web de qBittorrent. Se considera configurado cuando están el usuario y la contraseña.
+  torrent: process.env.TORRENT_USER && process.env.TORRENT_PASS
+    ? { url: process.env.TORRENT_URL?.trim() || "http://127.0.0.1:8080", username: process.env.TORRENT_USER, password: process.env.TORRENT_PASS }
+    : undefined,
+  // Espacio que debe quedar libre en el disco de descargas para aceptar una descarga nueva (GB).
+  torrentMinFreeBytes: Math.round(Number(process.env.TORRENT_MIN_FREE_GB ?? 5) * 1024 ** 3),
 };
 
 export const VIDEO_EXTS = new Set([".mp4", ".mkv", ".webm", ".m4v", ".mov"]);

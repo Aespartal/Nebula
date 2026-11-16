@@ -8,6 +8,7 @@ const PATHS = {
   home: <><path d="M4 11l8-7 8 7" /><path d="M6 10v10h12V10" /></>,
   check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
   cpu: <><rect x="6" y="6" width="12" height="12" rx="1" /><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4" /></>,
+  download: <><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5" /><path d="M5 19h14" /></>,
   chevron: <path d="M6 9l6 6 6-6" />,
 } as const;
 

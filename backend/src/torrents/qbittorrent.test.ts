@@ -108,3 +108,25 @@ test("una respuesta que no es «Fails.» ni «Ok.» se enseña, no se llama cont
     await assert.rejects(qb.login(), (e: QbError) => e.code === "http" && /401/.test(e.message) && /Unauthorized/.test(e.message));
   } finally { server.close(); }
 });
+
+test("autenticación omitida para localhost: login 204 sin cookie y la API responde sin sesión", async () => {
+  const server = http.createServer((req, res) => {
+    if (req.url === "/api/v2/auth/login") { res.statusCode = 204; return res.end(); }
+    if (req.url === "/api/v2/app/version") return res.end("v5.0.2");
+    res.statusCode = 404; res.end();
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  try {
+    const qb = new QBittorrent({ url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, username: "x", password: "y" });
+    assert.equal(await qb.version(), "v5.0.2");
+  } finally { server.close(); }
+});
+
+test("un 204 en el login con la API cerrada sigue siendo un error", async () => {
+  const server = http.createServer((req, res) => { res.statusCode = req.url === "/api/v2/auth/login" ? 204 : 403; res.end(); });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  try {
+    const qb = new QBittorrent({ url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, username: "x", password: "y" });
+    await assert.rejects(() => qb.login(), (e) => e instanceof QbError && e.code === "http");
+  } finally { server.close(); }
+});

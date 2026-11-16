@@ -21,6 +21,8 @@ export interface QbTorrent {
 
 export class QBittorrent {
   private sid: string | null = null;
+  /** true si qBittorrent no pide sesión (p. ej. «omitir autenticación para clientes en localhost»). */
+  private open = false;
   private readonly base: string;
   private readonly f: typeof fetch;
 
@@ -46,9 +48,16 @@ export class QBittorrent {
 
   async login(): Promise<void> {
     this.sid = null;
+    this.open = false;
     const r = await this.raw("POST", "auth/login", { username: this.o.username, password: this.o.password });
     if (r.status === 403) throw new QbError("banned", "qBittorrent ha bloqueado temporalmente esta dirección por demasiados intentos fallidos", 403);
     const text = (await r.text()).trim();
+    // Con la autenticación omitida para localhost el login puede devolver 204 y ninguna cookie:
+    // en ese caso se comprueba si la API responde sin sesión.
+    if (r.status === 204 || (r.status === 200 && text === "Ok." && !r.headers.getSetCookie().length)) {
+      const probe = await this.raw("GET", "app/version");
+      if (probe.ok) { this.open = true; return; }
+    }
     // Solo «Fails.» es un rechazo de credenciales; cualquier otra respuesta se enseña tal cual para poder diagnosticarla.
     if (r.status !== 200) throw new QbError("http", `qBittorrent respondió ${r.status} al iniciar sesión: «${text.slice(0, 120)}»`, r.status);
     if (text !== "Ok.") throw new QbError("auth", text === "Fails." ? "Usuario o contraseña incorrectos" : `Respuesta inesperada al iniciar sesión: «${text.slice(0, 120)}»`, r.status);
@@ -59,7 +68,7 @@ export class QBittorrent {
 
   /** Petición autenticada: si la sesión ha caducado (403), inicia sesión otra vez y reintenta una vez. */
   private async call(method: "GET" | "POST", path: string, form?: Record<string, string>): Promise<Response> {
-    if (!this.sid) await this.login();
+    if (!this.sid && !this.open) await this.login();
     let r = await this.raw(method, path, form);
     if (r.status === 403) { await this.login(); r = await this.raw(method, path, form); }
     if (!r.ok) throw new QbError("http", `qBittorrent respondió ${r.status} en ${path}`, r.status);

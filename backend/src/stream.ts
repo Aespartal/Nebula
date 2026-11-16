@@ -1,6 +1,6 @@
 import { createReadStream } from "node:fs";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import type { IndexedItem } from "./scanner.js";
+export interface StreamTarget { absPath: string; sizeBytes: number; ext: string }
 
 const MIME: Record<string, string> = {
   ".mp4": "video/mp4",
@@ -11,7 +11,7 @@ const MIME: Record<string, string> = {
 };
 
 /** Direct Play con soporte de HTTP Range (necesario para seek en <video>). */
-export function sendRanged(req: FastifyRequest, reply: FastifyReply, item: IndexedItem) {
+export function sendRanged(req: FastifyRequest, reply: FastifyReply, item: StreamTarget) {
   const size = item.sizeBytes;
   const range = req.headers.range;
   reply.header("Accept-Ranges", "bytes");

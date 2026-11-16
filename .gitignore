@@ -3,3 +3,4 @@ dist
 .env
 .transcode-cache
 media-test
+data

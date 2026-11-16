@@ -37,3 +37,19 @@ export function formatBytes(bytes: number): string {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1).replace(".", ",")} GB`;
   return `${Math.max(0, Math.round(bytes / 1024 ** 2))} MB`;
 }
+
+/** 1 572 864 → "1,5 MB/s". */
+export function formatSpeed(bytesPerSecond: number): string {
+  if (bytesPerSecond >= 1024 ** 2) return `${(bytesPerSecond / 1024 ** 2).toFixed(1).replace(".", ",")} MB/s`;
+  return `${Math.round(bytesPerSecond / 1024)} KB/s`;
+}
+
+/** Tiempo que falta para terminar, en palabras: "45 s", "12 min", "2 h 10 min". null = no se sabe. */
+export function formatEta(seconds: number | null): string {
+  if (seconds === null) return "—";
+  if (seconds < 60) return `${Math.max(1, Math.round(seconds))} s`;
+  const m = Math.round(seconds / 60);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  return `${h} h ${m % 60} min`;
+}

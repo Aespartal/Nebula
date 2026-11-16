@@ -6,6 +6,7 @@ import { registerAuthRoutes } from "./auth/routes.js";
 import { openDb } from "./db/index.js";
 import { completionHandlers, registerDownloadRoutes } from "./downloads-routes.js";
 import { TorrentError, type TorrentClient, type TorrentInfo } from "./torrents/client.js";
+import { SearchError } from "./torrents/search.js";
 import { TorrentService } from "./torrents/service.js";
 
 const HASH = "c12fe1c06bba254a9dc9f519b335aa7c1367a88a";
@@ -37,7 +38,7 @@ class Fake implements TorrentClient {
   async remove(h: string, files: boolean) { this.guard(); this.log.push(`remove ${h} files=${files}`); this.torrents = this.torrents.filter((t) => t.hash !== h); }
 }
 
-async function build(opts: { configured?: boolean; libraries?: boolean } = {}) {
+async function build(opts: { configured?: boolean; libraries?: boolean; search?: unknown } = {}) {
   const db = openDb(":memory:");
   if (opts.libraries !== false) db.prepare("INSERT INTO libraries(id,name,type,root_path) VALUES(1,'Pelis','movies','D:\\Peliculas'),(2,'Series','series','D:\\Series')").run();
   const fake = new Fake();
@@ -49,7 +50,7 @@ async function build(opts: { configured?: boolean; libraries?: boolean } = {}) {
   await registerAuth(app, db);
   registerAuthRoutes(app, db);
   const configured = opts.configured !== false;
-  registerDownloadRoutes(app, db, { client: configured ? fake : null, service: configured ? service : null, minFreeBytes: 5 * GB, rescan: (id) => rescans.push(id) });
+  registerDownloadRoutes(app, db, { client: configured ? fake : null, service: configured ? service : null, minFreeBytes: 5 * GB, rescan: (id) => rescans.push(id), search: (opts.search ?? null) as any });
   await app.ready();
   const r = await app.inject({ method: "POST", url: "/api/auth/setup", payload: { username: "alex", password: "contraseña-larga" } });
   const admin = `nebula_session=${r.cookies[0].value}`;
@@ -268,5 +269,74 @@ test("al terminar: se anota la fecha, se pide el escaneo y solo ocurre una vez (
     assert.ok(row.completed_at > 0);
     assert.equal(row.name, "Debian 12 netinst.iso");
     assert.ok((await req("GET", "/api/downloads")).json()[0].completedAt > 0);
+  } finally { await app.close(); }
+});
+
+function stubSearch() {
+  const calls: string[] = [];
+  const hit = { id: "r1", title: "Debian 12", sizeBytes: 600e6, seeders: 9, leechers: 1, indexer: "A", publishedAt: null, infoUrl: null, hash: HASH };
+  return {
+    calls,
+    async search(q: string, kind?: string) { calls.push(`search ${q} ${kind ?? ""}`); if (q === "caido") throw new SearchError("unreachable", "ECONNREFUSED"); return [hit, { ...hit, id: "r2", title: "Otro", hash: "ab".repeat(20) }]; },
+    async resolve(id: string) {
+      calls.push(`resolve ${id}`);
+      if (id === "r1") return { magnet: MAGNET };
+      if (id === "file") return { file: torrentFile(1000) };
+      throw new SearchError("not_found", "ya no está");
+    },
+  };
+}
+
+test("buscador: solo administradores y sin configurar → 503", async () => {
+  const none = await build();
+  try {
+    assert.equal((await none.req("GET", "/api/downloads/search?q=debian")).statusCode, 503);
+    assert.equal((await none.req("POST", "/api/downloads/search/add", none.admin, { id: "r1", kind: "movies" })).statusCode, 503);
+    assert.equal(((await none.req("GET", "/api/downloads/status")).json() as any).searchConfigured, false);
+  } finally { await none.app.close(); }
+  const { app, user, req } = await build({ search: stubSearch() });
+  try {
+    assert.equal((await req("GET", "/api/downloads/search?q=debian", user)).statusCode, 403);
+    assert.equal((await req("POST", "/api/downloads/search/add", user, { id: "r1", kind: "movies" })).statusCode, 403);
+  } finally { await app.close(); }
+});
+
+test("buscador: busca, marca lo ya añadido y valida la consulta", async () => {
+  const st = stubSearch();
+  const { app, req, fake } = await build({ search: st });
+  try {
+    assert.equal(((await req("GET", "/api/downloads/status")).json() as any).searchConfigured, true);
+    assert.equal((await req("GET", "/api/downloads/search?q=a")).statusCode, 400);
+    assert.equal((await req("GET", "/api/downloads/search?q=%20%20x%20%20")).statusCode, 400);
+    assert.equal((await req("GET", "/api/downloads/search?q=debian&kind=otra")).statusCode, 400);
+    let r = await req("GET", "/api/downloads/search?q=debian&kind=movies");
+    assert.equal(r.statusCode, 200);
+    assert.deepEqual((r.json() as any[]).map((x) => [x.id, x.added]), [["r1", false], ["r2", false]]);
+    assert.ok(!("hash" in (r.json() as any[])[0]), "el hash no sale al navegador");
+    assert.equal((await req("POST", "/api/downloads/search/add", undefined, { id: "r1", kind: "movies" })).statusCode, 201);
+    r = await req("GET", "/api/downloads/search?q=debian");
+    assert.deepEqual((r.json() as any[]).map((x) => x.added), [true, false]);
+    assert.deepEqual(fake.log, [`add ${HASH} nebula-peliculas`]);
+    const caido = await req("GET", "/api/downloads/search?q=caido");
+    assert.equal(caido.statusCode, 502);
+    assert.equal((caido.json() as any).error, "search_unreachable");
+  } finally { await app.close(); }
+});
+
+test("buscador: añadir por id usa el mismo flujo (duplicado, espacio, .torrent, id caducado)", async () => {
+  const { app, req, fake, db } = await build({ search: stubSearch() });
+  try {
+    const bad = await req("POST", "/api/downloads/search/add", undefined, { id: "x", kind: "series" });
+    assert.equal(bad.statusCode, 404);
+    assert.equal((await req("POST", "/api/downloads/search/add", undefined, { id: "r1", kind: "otra" })).statusCode, 400);
+    assert.equal((await req("POST", "/api/downloads/search/add", undefined, { id: "r1", kind: "series", url: "http://malo" })).statusCode, 201, "las propiedades extra se descartan, no se usan");
+    assert.equal((db.prepare("SELECT kind FROM downloads").get() as any).kind, "series");
+    assert.equal((await req("POST", "/api/downloads/search/add", undefined, { id: "r1", kind: "series" })).statusCode, 409);
+    fake.free = 1 * GB;
+    const full = await req("POST", "/api/downloads/search/add", undefined, { id: "file", kind: "movies" });
+    assert.equal(full.statusCode, 507);
+    fake.free = 100 * GB;
+    assert.equal((await req("POST", "/api/downloads/search/add", undefined, { id: "file", kind: "movies" })).statusCode, 201);
+    assert.equal(fake.log.filter((l) => l.startsWith("add")).length, 2);
   } finally { await app.close(); }
 });

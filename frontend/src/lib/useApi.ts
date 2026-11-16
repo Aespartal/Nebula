@@ -43,7 +43,7 @@ export function useApi<T>(path: string | null) {
 
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; code: string; status?: number; retryAfter?: number; body?: Record<string, unknown> };
 
-export async function sendJson<T = unknown>(method: "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<ApiResult<T>> {
+export async function sendJson<T = unknown>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<ApiResult<T>> {
   try {
     const r = await fetch(path, {
       method,

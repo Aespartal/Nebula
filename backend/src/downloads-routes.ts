@@ -1,9 +1,10 @@
-import type { FastifyInstance, FastifyReply } from "fastify";
-import type { DownloadItem, DownloadKind, DownloadsStatus } from "@nebula/shared";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { DownloadItem, DownloadKind, DownloadsStatus, SearchHit } from "@nebula/shared";
 import { requireAdmin } from "./auth/plugin.js";
 import type { Db } from "./db/index.js";
 import { TorrentError, type TorrentClient, type TorrentInfo } from "./torrents/client.js";
 import type { TorrentService } from "./torrents/service.js";
+import { SearchError, type Prowlarr, type SearchResult } from "./torrents/search.js";
 import { magnetHash, torrentHash, torrentSize } from "./torrents/torrent-meta.js";
 
 /** Categorías de qBittorrent: su carpeta final es la de la biblioteca del mismo tipo. */
@@ -15,6 +16,8 @@ export interface DownloadDeps {
   client: TorrentClient | null;
   service: TorrentService | null;
   minFreeBytes: number;
+  /** Buscador de torrents (Prowlarr); null = sin PROWLARR_API_KEY. */
+  search?: Prowlarr | null;
   /** Pide un escaneo de la biblioteca (tras quitar archivos o al completarse algo). */
   rescan?: (libraryId: number | null) => void;
 }
@@ -34,7 +37,7 @@ export function registerDownloadRoutes(app: FastifyInstance, db: Db, deps: Downl
   const managed = (hash: string) => db.prepare("SELECT hash FROM downloads WHERE hash=?").get(hash.toLowerCase()) as { hash: string } | undefined;
 
   app.get("/api/downloads/status", guard, async (): Promise<DownloadsStatus> => {
-    const base = { minFreeBytes: deps.minFreeBytes };
+    const base = { minFreeBytes: deps.minFreeBytes, searchConfigured: !!deps.search };
     if (!deps.client) return { configured: false, connected: false, freeBytes: null, ...base };
     const c = await deps.client.check();
     if (!c.ok) return { configured: true, connected: false, error: c.error, message: c.message, freeBytes: null, ...base };
@@ -74,53 +77,100 @@ export function registerDownloadRoutes(app: FastifyInstance, db: Db, deps: Downl
       },
     },
     async (req, reply) => {
-      const { client, service } = deps;
-      if (!client || !service) return notConfigured(reply);
       const { magnet, torrentBase64, kind } = req.body;
       if (!!magnet === !!torrentBase64) return reply.code(400).send({ error: "magnet_or_torrent" });
+      return addTorrent(req, reply, { kind, magnet, file: torrentBase64 ? Buffer.from(torrentBase64, "base64") : undefined });
+    },
+  );
 
-      // 1) Validar lo que llega, sin tocar nada todavía.
-      let hash: string;
-      let file: Buffer | undefined;
-      let neededBytes = deps.minFreeBytes;
-      try {
-        if (magnet) hash = magnetHash(magnet);
-        else {
-          file = Buffer.from(torrentBase64!, "base64");
-          if (file.length > MAX_TORRENT_BYTES) return reply.code(413).send({ error: "torrent_too_large" });
-          hash = torrentHash(file);
-          neededBytes += torrentSize(file) ?? 0;
-        }
-      } catch (e) {
-        if (e instanceof TorrentError) return reply.code(400).send({ error: e.code });
-        throw e;
+  /** Alta común (formulario y buscador): valida, comprueba espacio, crea la categoría y añade. */
+  async function addTorrent(req: FastifyRequest, reply: FastifyReply, input: { kind: DownloadKind; magnet?: string; file?: Buffer; name?: string }) {
+    const { client, service } = deps;
+    if (!client || !service) return notConfigured(reply);
+    const { magnet, file, kind } = input;
+
+    // 1) Validar lo que llega, sin tocar nada todavía.
+    let hash: string;
+    let neededBytes = deps.minFreeBytes;
+    try {
+      if (magnet) hash = magnetHash(magnet);
+      else {
+        if (file!.length > MAX_TORRENT_BYTES) return reply.code(413).send({ error: "torrent_too_large" });
+        hash = torrentHash(file!);
+        neededBytes += torrentSize(file!) ?? 0;
       }
+    } catch (e) {
+      if (e instanceof TorrentError) return reply.code(400).send({ error: e.code });
+      throw e;
+    }
 
-      if (managed(hash) || service.snapshot().torrents.some((t) => t.hash === hash)) return reply.code(409).send({ error: "already_added" });
+    if (managed(hash) || service.snapshot().torrents.some((t) => t.hash === hash)) return reply.code(409).send({ error: "already_added" });
 
-      // 2) La biblioteca de destino: su carpeta es donde el cliente dejará el vídeo al terminar.
-      const lib = db.prepare("SELECT id, root_path FROM libraries WHERE type=? ORDER BY id LIMIT 1").get(kind) as { id: number; root_path: string } | undefined;
-      if (!lib) return reply.code(409).send({ error: "no_library" });
+    // 2) La biblioteca de destino: su carpeta es donde el cliente dejará el vídeo al terminar.
+    const lib = db.prepare("SELECT id, root_path FROM libraries WHERE type=? ORDER BY id LIMIT 1").get(kind) as { id: number; root_path: string } | undefined;
+    if (!lib) return reply.code(409).send({ error: "no_library" });
 
+    try {
+      // 3) Espacio libre.
+      const free = await client.freeSpaceBytes();
+      if (free !== null && free < neededBytes) return reply.code(507).send({ error: "not_enough_space", freeBytes: free, neededBytes });
+
+      // 4) Categoría con la carpeta final y alta del torrent.
+      await client.ensureCategory(CATEGORY[kind], lib.root_path);
+      const opts = { category: CATEGORY[kind] };
+      if (file) await client.addFile(file, opts); else await client.addMagnet(magnet!, opts);
+    } catch (e) {
+      if (e instanceof TorrentError) return reply.code(e.code === "rejected" ? 409 : 400).send({ error: e.code === "rejected" ? "already_added" : e.code });
+      return unreachable(reply, e);
+    }
+
+    const name = input.name ?? (magnet ? new URL(magnet.trim()).searchParams.get("dn") : null) ?? hash;
+    db.prepare("INSERT INTO downloads(hash,name,kind,added_by,added_at,library_id) VALUES(?,?,?,?,?,?)")
+      .run(hash, (name || hash).slice(0, 300), kind, req.user?.id ?? null, Date.now(), lib.id);
+    await service.refresh();
+    const row = rows().find((r) => r.hash === hash)!;
+    return reply.code(201).send({ hash, kind, name: row.name });
+  }
+
+  // --- Buscador (Prowlarr) ---
+  const searchFail = (reply: FastifyReply, e: unknown) => {
+    if (e instanceof SearchError) {
+      const code = e.code === "not_found" ? 404 : e.code === "bad_source" ? 422 : 502;
+      return reply.code(code).send({ error: e.code === "auth" ? "search_auth" : e.code === "unreachable" ? "search_unreachable" : e.code, message: e.message });
+    }
+    throw e;
+  };
+
+  app.get<{ Querystring: { q: string; kind?: DownloadKind } }>(
+    "/api/downloads/search",
+    {
+      preHandler: requireAdmin,
+      schema: { querystring: { type: "object", required: ["q"], properties: { q: { type: "string", minLength: 2, maxLength: 120 }, kind: { enum: ["movies", "series"] } } } },
+    },
+    async (req, reply): Promise<SearchHit[] | void> => {
+      if (!deps.search) return reply.code(503).send({ error: "search_not_configured" });
+      const q = req.query.q.trim();
+      if (q.length < 2) return reply.code(400).send({ error: "query_too_short" });
       try {
-        // 3) Espacio libre.
-        const free = await client.freeSpaceBytes();
-        if (free !== null && free < neededBytes) return reply.code(507).send({ error: "not_enough_space", freeBytes: free, neededBytes });
+        const results = await deps.search.search(q, req.query.kind);
+        const known = new Set([...rows().map((r) => r.hash), ...(deps.service?.snapshot().torrents.map((t) => t.hash) ?? [])]);
+        return results.map(({ hash, ...r }: SearchResult) => ({ ...r, added: hash !== null && known.has(hash) }));
+      } catch (e) { return searchFail(reply, e); }
+    },
+  );
 
-        // 4) Categoría con la carpeta final y alta del torrent.
-        await client.ensureCategory(CATEGORY[kind], lib.root_path);
-        const opts = { category: CATEGORY[kind] };
-        if (file) await client.addFile(file, opts); else await client.addMagnet(magnet!, opts);
-      } catch (e) {
-        if (e instanceof TorrentError) return reply.code(e.code === "rejected" ? 409 : 400).send({ error: e.code === "rejected" ? "already_added" : e.code });
-        return unreachable(reply, e);
-      }
-
-      db.prepare("INSERT INTO downloads(hash,name,kind,added_by,added_at,library_id) VALUES(?,?,?,?,?,?)")
-        .run(hash, (magnet ? new URL(magnet.trim()).searchParams.get("dn") || hash : hash).slice(0, 300), kind, req.user?.id ?? null, Date.now(), lib.id);
-      await service.refresh();
-      const row = rows().find((r) => r.hash === hash)!;
-      return reply.code(201).send({ hash, kind, name: row.name });
+  // Se añade por id de un resultado reciente; el cliente nunca manda direcciones.
+  app.post<{ Body: { id: string; kind: DownloadKind } }>(
+    "/api/downloads/search/add",
+    {
+      preHandler: requireAdmin,
+      schema: { body: { type: "object", required: ["id", "kind"], additionalProperties: false, properties: { id: { type: "string", maxLength: 40 }, kind: { enum: ["movies", "series"] } } } },
+    },
+    async (req, reply) => {
+      if (!deps.search) return reply.code(503).send({ error: "search_not_configured" });
+      let resolved;
+      try { resolved = await deps.search.resolve(req.body.id); } catch (e) { return searchFail(reply, e); }
+      return addTorrent(req, reply, { kind: req.body.kind, ...resolved, name: undefined });
     },
   );
 

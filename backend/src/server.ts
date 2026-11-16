@@ -17,6 +17,7 @@ import { registerMetadataRoutes } from "./metadata/routes.js";
 import { Tmdb } from "./metadata/tmdb.js";
 import { registerProgressRoutes } from "./progress-routes.js";
 import { registerRoutes } from "./routes.js";
+import { Prowlarr } from "./torrents/search.js";
 import { incompletePathFilter, scanLibrary, setScanExclusion, type LibraryRow } from "./scanner.js";
 import { completionHandlers, registerDownloadRoutes } from "./downloads-routes.js";
 import { registerSystemRoutes } from "./system-routes.js";
@@ -89,7 +90,8 @@ const torrentClient = config.torrent ? new QBittorrent(config.torrent) : null;
 const torrentService = torrentClient
   ? new TorrentService(torrentClient, { ...completionHandlers(db, rescan), log: (m) => app.log.warn(m) })
   : null;
-registerDownloadRoutes(app, db, { client: torrentClient, service: torrentService, minFreeBytes: config.torrentMinFreeBytes, rescan });
+const prowlarr = config.prowlarr ? new Prowlarr(config.prowlarr) : null;
+registerDownloadRoutes(app, db, { client: torrentClient, service: torrentService, minFreeBytes: config.torrentMinFreeBytes, rescan, search: prowlarr });
 if (torrentService) {
   setScanExclusion(incompletePathFilter(() => torrentService.snapshot().torrents));
   torrentService.start();

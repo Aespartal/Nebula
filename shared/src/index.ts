@@ -210,4 +210,20 @@ export interface DownloadsStatus {
   freeBytes: number | null;
   /** Margen que se exige libre antes de aceptar una descarga nueva. */
   minFreeBytes: number;
+  /** ¿Está PROWLARR_API_KEY en el .env? Sin ella no hay buscador. */
+  searchConfigured: boolean;
+}
+
+/** Resultado de buscar torrents en Prowlarr. */
+export interface SearchHit {
+  id: string;
+  title: string;
+  sizeBytes: number;
+  seeders: number;
+  leechers: number;
+  indexer: string;
+  publishedAt: number | null;
+  infoUrl: string | null;
+  /** Ya está entre las descargas. */
+  added: boolean;
 }

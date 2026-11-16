@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import type { DownloadItem, DownloadKind, DownloadsStatus } from "@nebula/shared";
+import type { DownloadItem, DownloadKind, DownloadsStatus, SearchHit } from "@nebula/shared";
 import { Button } from "../components/Button";
+import { Icon } from "../components/Icon";
 import { PageHeading } from "../components/PageHeading";
 import { Empty, ErrorBox, Loading } from "../components/States";
 import { useUser } from "../lib/auth";
@@ -40,6 +41,12 @@ const ERRORS: Record<string, string> = {
   magnet_or_torrent: "Pega un enlace magnet o elige un archivo .torrent.",
   both: "Usa solo una opción: o el enlace magnet, o el archivo .torrent.",
   network: "No se pudo conectar con el servidor de Nebula.",
+  search_not_configured: "El buscador no está configurado: falta PROWLARR_API_KEY en el archivo .env.",
+  search_auth: "Prowlarr rechazó la API key. Revisa PROWLARR_API_KEY en el archivo .env.",
+  search_unreachable: "Nebula no puede hablar con Prowlarr ahora mismo. ¿Está abierto y la dirección es correcta?",
+  not_found: "Ese resultado ya no está disponible. Vuelve a buscar.",
+  bad_source: "Ese resultado no se puede descargar de forma segura.",
+  fetch_failed: "Prowlarr no pudo darle a Nebula el archivo de ese resultado. Prueba con otro.",
 };
 
 function Bar({ value, label }: { value: number; label: string }) {
@@ -173,6 +180,104 @@ function AddForm({ disabled, onAdded }: { disabled: boolean; onAdded: (name: str
         </Button>
         <div role="alert">{error && <p className="msg-error">{error}</p>}</div>
       </form>
+    </section>
+  );
+}
+
+function SearchPanel({ disabled, onAdded }: { disabled: boolean; onAdded: (name: string) => void }) {
+  const ids = { q: useId(), kind: useId() };
+  const [q, setQ] = useState("");
+  const [kind, setKind] = useState<DownloadKind>("movies");
+  const [hits, setHits] = useState<SearchHit[] | null>(null);
+  const [asked, setAsked] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [adding, setAdding] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [rowError, setRowError] = useState<{ id: string; text: string } | null>(null);
+  const [focusTick, setFocusTick] = useState(0);
+  const results = useRef<HTMLHeadingElement>(null);
+
+  async function search(e: FormEvent) {
+    e.preventDefault();
+    const term = q.trim();
+    setError(""); setRowError(null);
+    if (term.length < 2) { setError("Escribe al menos 2 letras."); return; }
+    setBusy(true);
+    const r = await sendJson<SearchHit[]>("GET", `/api/downloads/search?q=${encodeURIComponent(term)}&kind=${kind}`);
+    setBusy(false);
+    if (!r.ok) { setHits(null); setError(ERRORS[r.code] ?? "No se pudo buscar."); return; }
+    setHits(r.data); setAsked(term); setFocusTick((n) => n + 1);
+  }
+  // Tras buscar, el foco pasa al encabezado de resultados para quien usa lector de pantalla o teclado.
+  useEffect(() => { if (focusTick > 0) results.current?.focus(); }, [focusTick]);
+
+  async function add(h: SearchHit) {
+    setRowError(null); setAdding(h.id);
+    const r = await sendJson<{ name: string }>("POST", "/api/downloads/search/add", { id: h.id, kind });
+    setAdding(null);
+    if (!r.ok) {
+      if (r.code === "not_enough_space") {
+        const b = r.body as { freeBytes?: number; neededBytes?: number } | undefined;
+        setRowError({ id: h.id, text: `No hay espacio suficiente: quedan ${formatBytes(b?.freeBytes ?? 0)} libres y hacen falta ${formatBytes(b?.neededBytes ?? 0)}.` });
+      } else setRowError({ id: h.id, text: ERRORS[r.code] ?? "No se pudo añadir la descarga." });
+      return;
+    }
+    setHits((cur) => cur && cur.map((x) => (x.id === h.id ? { ...x, added: true } : x)));
+    onAdded(h.title);
+  }
+
+  return (
+    <section aria-labelledby="buscar-torrents" className="mb-10 max-w-3xl">
+      <div className="mb-4 border-b border-rule pb-4">
+        <div className="label">Prowlarr</div>
+        <h2 id="buscar-torrents" className="text-lg font-bold tracking-tight">Buscar torrents</h2>
+      </div>
+      <form onSubmit={search} className="flex flex-col gap-3 sm:flex-row sm:items-end" noValidate role="search" aria-label="Buscar torrents">
+        <div className="flex-1">
+          <label htmlFor={ids.q} className="mb-1 block text-meta font-bold text-soft">Título</label>
+          <input id={ids.q} type="search" className="field" value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" disabled={disabled} maxLength={120} />
+        </div>
+        <div>
+          <label htmlFor={ids.kind} className="mb-1 block text-meta font-bold text-soft">Qué es</label>
+          <select id={ids.kind} className="field" value={kind} onChange={(e) => setKind(e.target.value as DownloadKind)} disabled={disabled}>
+            <option value="movies">Película</option>
+            <option value="series">Serie</option>
+          </select>
+        </div>
+        <Button type="submit" disabled={disabled || busy} aria-busy={busy} className="w-full sm:w-auto">{busy ? "Buscando…" : "Buscar"}</Button>
+      </form>
+      <div role="alert">{error && <p className="msg-error mt-3">{error}</p>}</div>
+      <p role="status" className="sr-only">{busy ? "Buscando…" : hits ? `${hits.length} resultados para ${asked}` : ""}</p>
+
+      {hits && (
+        <div className="mt-6">
+          <h3 ref={results} tabIndex={-1} className="mb-3 text-meta font-bold text-soft outline-none">
+            {hits.length ? `${hits.length} resultados para «${asked}»` : `Sin resultados para «${asked}»`}
+          </h3>
+          {!hits.length && <p className="text-muted">Prueba con otro título, o con el nombre original. Los resultados dependen de los indexadores que tengas en Prowlarr.</p>}
+          <ul className="divide-y divide-rule border-y border-rule">
+            {hits.map((h) => (
+              <li key={h.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                <div className="min-w-0">
+                  <p className="break-words font-bold">{h.title}</p>
+                  <p className="text-meta text-muted">
+                    {formatBytes(h.sizeBytes)} · <span className={h.seeders === 0 ? "text-warn" : "text-ok"}>{h.seeders} {h.seeders === 1 ? "semilla" : "semillas"}</span>
+                    {h.indexer && <> · {h.indexer}</>}
+                    {h.publishedAt && <> · {new Date(h.publishedAt).toLocaleDateString("es-ES")}</>}
+                  </p>
+                  {rowError?.id === h.id && <p role="alert" className="msg-error mt-1">{rowError.text}</p>}
+                </div>
+                {h.added
+                  ? <span className="text-meta font-bold text-ok">Ya añadida</span>
+                  : <Button variant="secondary" className="w-full shrink-0 sm:w-auto" disabled={disabled || adding !== null} aria-busy={adding === h.id}
+                      aria-label={`Descargar ${h.title}`} onClick={() => add(h)}>
+                      <Icon name="download" className="size-5" /> {adding === h.id ? "Añadiendo…" : "Descargar"}
+                    </Button>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
   );
 }
@@ -323,6 +428,9 @@ export default function Downloads() {
       <Connection status={status.data} loading={status.loading} error={status.error} reload={status.reload} />
       <p role="status" className="sr-only">{note}</p>
       {note && <p aria-hidden="true" className="msg-info mb-6 max-w-2xl">{note}</p>}
+      {status.data?.searchConfigured
+        ? <SearchPanel disabled={!status.data?.connected} onAdded={(name) => { setNote(`Añadida «${name}».`); status.reload(); }} />
+        : status.data?.configured && <p className="mb-10 max-w-2xl text-muted">Para buscar torrents desde aquí, instala Prowlarr y pon <code className="font-mono">PROWLARR_API_KEY</code> en el archivo <code className="font-mono">.env</code> (la guía está en el README).</p>}
       <AddForm disabled={!status.data?.connected} onAdded={(name) => { setNote(`Añadida «${name}».`); status.reload(); }} />
       <List configured={!!status.data?.configured} connected={!!status.data?.connected} onNote={setNote} />
     </>

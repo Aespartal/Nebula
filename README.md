@@ -58,6 +58,13 @@ Nebula controla un qBittorrent instalado **en el mismo equipo** (decisiones y pl
 - Cualquier usuario puede usar **Descargar archivo** en la página de reproducción para bajarse el original (admite reanudar).
 - Solo se gestionan las descargas que añade Nebula, no el resto de lo que haya en qBittorrent. Si en el disco no queda margen libre (`TORRENT_MIN_FREE_GB`, 5 GB por defecto) se niega a añadir.
 
+**Buscador (opcional)**: con [Prowlarr](https://prowlarr.com) instalado en el mismo equipo, la pestaña Descargas puede buscar torrents y añadirlos con un clic.
+1. Instala Prowlarr y añade los indexadores que quieras usar (*Indexers → Add Indexer*). Nebula no trae ninguno: qué buscar y dónde lo decides tú.
+2. Copia la API key (*Settings → General → Security*) y ponla en `.env` como `PROWLARR_API_KEY`; `PROWLARR_URL` por defecto es `http://127.0.0.1:9696`. Reinicia Nebula.
+3. En Descargas aparece «Buscar torrents»: eliges Película o Serie, buscas y pulsas **Descargar**. Los resultados salen ordenados por semillas y los ya añadidos se marcan.
+- Solo administradores. Nebula pide a Prowlarr únicamente lo que ha salido en la última búsqueda: el navegador nunca envía direcciones, y el `.torrent` solo se descarga del propio Prowlarr.
+- Los resultados con 0 semillas se muestran, pero normalmente no avanzan.
+
 **Configuración**
 1. En qBittorrent: *Herramientas → Opciones → Interfaz web*, activa la interfaz, deja la dirección en `127.0.0.1` y pon usuario y contraseña. No la expongas fuera del equipo.
 2. En `.env`: `TORRENT_URL` (por defecto `http://127.0.0.1:8080`), `TORRENT_USER` y `TORRENT_PASS`. El `.env` se lee al arrancar: reinicia Nebula tras cambiarlo.

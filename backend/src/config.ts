@@ -34,6 +34,10 @@ export const config = {
   torrent: process.env.TORRENT_USER && process.env.TORRENT_PASS
     ? { url: process.env.TORRENT_URL?.trim() || "http://127.0.0.1:8080", username: process.env.TORRENT_USER, password: process.env.TORRENT_PASS }
     : undefined,
+  // Buscador de torrents: Prowlarr local. Configurado cuando está la API key.
+  prowlarr: process.env.PROWLARR_API_KEY
+    ? { url: process.env.PROWLARR_URL?.trim() || "http://127.0.0.1:9696", apiKey: process.env.PROWLARR_API_KEY.trim() }
+    : undefined,
   // Espacio que debe quedar libre en el disco de descargas para aceptar una descarga nueva (GB).
   torrentMinFreeBytes: Math.round(Number(process.env.TORRENT_MIN_FREE_GB ?? 5) * 1024 ** 3),
 };

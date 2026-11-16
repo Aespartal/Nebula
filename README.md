@@ -43,6 +43,15 @@ El navegador informa de lo que sabe reproducir y el servidor decide:
 **Diagnóstico:** `npm run doctor` comprueba FFmpeg, la tarjeta NVIDIA y prueba de verdad cada ruta de conversión.
 Limitación actual: no hay *remux* (copiar el vídeo sin recodificar cuando solo falla el audio o el contenedor); siempre se recodifica.
 
+## Descargas (en preparación)
+
+Nebula controlará un qBittorrent instalado en el mismo equipo (plan en [`docs/plan-descargas.md`](docs/plan-descargas.md)).
+De momento solo está la comprobación de la conexión:
+
+1. En qBittorrent: *Herramientas → Opciones → Interfaz web*, activa la interfaz, deja la dirección en `127.0.0.1` y pon usuario y contraseña.
+2. En `.env`: `TORRENT_URL` (por defecto `http://127.0.0.1:8080`), `TORRENT_USER` y `TORRENT_PASS`.
+3. Ejecuta `npm run torrents:doctor`: comprueba la conexión, lee las carpetas y la configuración de siembra, y prueba a crear y borrar una categoría temporal.
+
 ## Subtítulos y audio
 
 - Subtítulos de texto (SRT, ASS/SSA, mov_text, WebVTT), incrustados o en archivos externos junto al vídeo, se convierten a WebVTT al vuelo y se guardan en caché. Los de imagen (PGS, DVD) no se pueden mostrar en el navegador y aparecen desactivados.

@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "tsx watch --env-file-if-exists=../.env src/server.ts",
     "typecheck": "tsc",
-    "test": "node --import tsx --test src/*.test.ts src/ffmpeg/*.test.ts",
+    "test": "node --import tsx --test src/*.test.ts src/ffmpeg/*.test.ts src/torrents/*.test.ts",
     "start": "node --env-file-if-exists=../.env --import tsx src/server.ts",
-    "doctor": "tsx src/doctor.ts"
+    "doctor": "tsx src/doctor.ts",
+    "torrents:doctor": "node --env-file-if-exists=../.env --import tsx src/torrents/doctor.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.5",

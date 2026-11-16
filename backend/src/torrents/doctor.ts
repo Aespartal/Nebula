@@ -20,6 +20,7 @@ if (!username || !password) {
   process.exit(1);
 }
 
+console.log(`Usuario leído: «${username}» · contraseña leída: ${password.length} caracteres`);
 const qb = new QBittorrent({ url, username, password });
 const v = (x: unknown) => (x === undefined ? "(no existe en esta versión)" : String(x));
 
@@ -32,6 +33,7 @@ try {
   const err = e as QbError;
   if (err.code === "unreachable") fail(err.message, "¿Está qBittorrent abierto y con la interfaz web activada (Herramientas → Opciones → Interfaz web)? ¿El puerto coincide con TORRENT_URL?");
   else if (err.code === "auth") fail(err.message, "Revisa TORRENT_USER y TORRENT_PASS. Cuidado: tras varios fallos seguidos qBittorrent bloquea la dirección un rato.");
+  else if (err.code === "http") fail(err.message, "Si ves 401 o 403, puede ser la protección de qBittorrent (Opciones → Interfaz web → «Habilitar protección CSRF» y «Validación del encabezado Host»). Cuéntame qué número sale.");
   else if (err.code === "banned") fail(err.message, "Espera unos minutos, o reinicia qBittorrent, y vuelve a probar.");
   else fail(err.message);
   console.log("\nNo se puede seguir sin conexión.");

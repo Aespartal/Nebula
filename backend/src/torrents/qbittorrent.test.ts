@@ -99,3 +99,12 @@ test("envía Origin y Referer propios (la protección CSRF de qBittorrent los ex
     assert.equal(state.badOrigin, 0);
   } finally { server.close(); }
 });
+
+test("una respuesta que no es «Fails.» ni «Ok.» se enseña, no se llama contraseña incorrecta", async () => {
+  const server = http.createServer((_req, res) => { res.statusCode = 401; res.end("Unauthorized"); });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  try {
+    const qb = new QBittorrent({ url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, username: "a", password: "b" });
+    await assert.rejects(qb.login(), (e: QbError) => e.code === "http" && /401/.test(e.message) && /Unauthorized/.test(e.message));
+  } finally { server.close(); }
+});

@@ -49,7 +49,9 @@ export class QBittorrent {
     const r = await this.raw("POST", "auth/login", { username: this.o.username, password: this.o.password });
     if (r.status === 403) throw new QbError("banned", "qBittorrent ha bloqueado temporalmente esta dirección por demasiados intentos fallidos", 403);
     const text = (await r.text()).trim();
-    if (!r.ok || text !== "Ok.") throw new QbError("auth", "Usuario o contraseña incorrectos", r.status);
+    // Solo «Fails.» es un rechazo de credenciales; cualquier otra respuesta se enseña tal cual para poder diagnosticarla.
+    if (r.status !== 200) throw new QbError("http", `qBittorrent respondió ${r.status} al iniciar sesión: «${text.slice(0, 120)}»`, r.status);
+    if (text !== "Ok.") throw new QbError("auth", text === "Fails." ? "Usuario o contraseña incorrectos" : `Respuesta inesperada al iniciar sesión: «${text.slice(0, 120)}»`, r.status);
     const cookie = r.headers.getSetCookie().map((c) => /(?:^|;\s*)SID=([^;]+)/.exec(c)?.[1]).find(Boolean);
     if (!cookie) throw new QbError("auth", "qBittorrent no devolvió la cookie de sesión");
     this.sid = cookie;

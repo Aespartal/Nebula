@@ -12,6 +12,7 @@
     "build": "npm run build -w frontend",
     "doctor": "npm run doctor -w backend",
     "start": "npm run build && npm run start -w backend",
-    "torrents:doctor": "npm run torrents:doctor -w backend"
+    "torrents:doctor": "npm run torrents:doctor -w backend",
+    "tokens": "npm run tokens -w frontend"
   }
 }

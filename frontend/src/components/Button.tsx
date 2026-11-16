@@ -2,11 +2,11 @@ import type { ButtonHTMLAttributes, RefAttributes } from "react";
 import { Link, type LinkProps } from "react-router-dom";
 
 const base =
-  "inline-flex min-h-12 items-center justify-center gap-2 rounded-md px-5 py-2 font-bold " +
-  "disabled:opacity-60 disabled:cursor-not-allowed";
+  "inline-flex min-h-[var(--control-h)] items-center justify-center gap-2 rounded-ctl px-4 text-meta font-bold " +
+  "transition-colors disabled:cursor-not-allowed disabled:opacity-50";
 const variants = {
-  primary: "bg-accent text-on-accent hover:brightness-110",
-  secondary: "border-2 border-line text-text hover:bg-surface",
+  primary: "bg-accent text-on-accent hover:bg-white",
+  secondary: "border border-line bg-surface text-text hover:border-muted hover:bg-raised",
 } as const;
 
 type Variant = keyof typeof variants;

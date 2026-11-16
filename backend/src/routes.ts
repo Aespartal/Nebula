@@ -5,7 +5,9 @@ import type {
   Library, MediaFileInfo, MovieSummary, NextEpisode, ScanStats, SeriesDetail, SeriesSummary,
 } from "@nebula/shared";
 import type { Db } from "./db/index.js";
+import { requireAdmin } from "./auth/plugin.js";
 import { getStreams } from "./media-queries.js";
+import { getProgress } from "./progress.js";
 import { scanLibrary, type LibraryRow } from "./scanner.js";
 import { sendRanged } from "./stream.js";
 
@@ -18,11 +20,13 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
   app.get("/api/health", async () => ({ ok: true }));
 
   // --- Bibliotecas ---
-  app.get("/api/libraries", async () => libs().map(toLibrary));
+  // Las rutas del servidor y la gestión de bibliotecas son solo para administradores.
+  app.get("/api/libraries", { preHandler: requireAdmin }, async () => libs().map(toLibrary));
 
   app.post<{ Body: { name: string; type: "movies" | "series"; rootPath: string } }>(
     "/api/libraries",
     {
+      preHandler: requireAdmin,
       schema: {
         body: {
           type: "object",
@@ -52,34 +56,41 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
     },
   );
 
-  app.post<{ Params: { id: string } }>("/api/libraries/:id/scan", async (req, reply) => {
+  app.post<{ Params: { id: string } }>("/api/libraries/:id/scan", { preHandler: requireAdmin }, async (req, reply) => {
     const lib = db.prepare("SELECT * FROM libraries WHERE id=?").get(Number(req.params.id)) as LibraryRow | undefined;
     if (!lib) return reply.code(404).send({ error: "not_found" });
     return scanOne(lib);
   });
 
-  app.post("/api/scan", async () => {
+  app.post("/api/scan", { preHandler: requireAdmin }, async () => {
     const out: Record<number, ScanStats> = {};
     for (const lib of libs()) out[lib.id] = await scanOne(lib);
     return out;
   });
 
   // --- Catálogo ---
-  app.get("/api/movies", async (): Promise<MovieSummary[]> =>
-    db.prepare(`
-      SELECT m.id, m.title, m.year, MIN(f.id) AS fileId
-      FROM movies m JOIN media_files f ON f.movie_id = m.id
-      GROUP BY m.id ORDER BY m.title COLLATE NOCASE`).all() as MovieSummary[],
-  );
+  app.get("/api/movies", async (req): Promise<MovieSummary[]> => {
+    const rows = db.prepare(`
+      SELECT x.id, x.title, x.year, x.fileId, COALESCE(wp.watched,0) AS watched,
+             CASE WHEN wp.duration_s > 0 THEN MIN(1.0, wp.position_s / wp.duration_s) ELSE 0 END AS progress
+      FROM (SELECT m.id, m.title, m.year, MIN(f.id) AS fileId
+            FROM movies m JOIN media_files f ON f.movie_id = m.id GROUP BY m.id) x
+      LEFT JOIN watch_progress wp ON wp.file_id = x.fileId AND wp.user_id = ?
+      ORDER BY x.title COLLATE NOCASE`).all(req.user!.id) as any[];
+    return rows.map((r) => ({ ...r, watched: !!r.watched }));
+  });
 
-  app.get("/api/series", async (): Promise<SeriesSummary[]> =>
+  app.get("/api/series", async (req): Promise<SeriesSummary[]> =>
     db.prepare(`
       SELECT s.id, s.title,
-             COUNT(DISTINCT se.id) AS seasons, COUNT(DISTINCT e.id) AS episodes
+             COUNT(DISTINCT se.id) AS seasons, COUNT(DISTINCT e.id) AS episodes,
+             COUNT(DISTINCT CASE WHEN wp.watched = 1 THEN e.id END) AS watchedEpisodes
       FROM series s
       JOIN seasons se ON se.series_id = s.id
       JOIN episodes e ON e.season_id = se.id
-      GROUP BY s.id ORDER BY s.title COLLATE NOCASE`).all() as SeriesSummary[],
+      LEFT JOIN media_files f ON f.episode_id = e.id
+      LEFT JOIN watch_progress wp ON wp.file_id = f.id AND wp.user_id = ?
+      GROUP BY s.id ORDER BY s.title COLLATE NOCASE`).all(req.user!.id) as SeriesSummary[],
   );
 
   app.get<{ Params: { id: string } }>("/api/series/:id", async (req, reply): Promise<SeriesDetail | void> => {
@@ -87,13 +98,17 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
       | { id: number; title: string } | undefined;
     if (!s) return reply.code(404).send({ error: "not_found" });
     const rows = db.prepare(`
-      SELECT se.id AS seasonId, se.number AS seasonNumber, e.id AS episodeId, e.number, e.title, MIN(f.id) AS fileId
-      FROM seasons se JOIN episodes e ON e.season_id = se.id JOIN media_files f ON f.episode_id = e.id
-      WHERE se.series_id = ? GROUP BY e.id ORDER BY se.number, e.number`).all(s.id) as any[];
+      SELECT x.*, COALESCE(wp.watched,0) AS watched,
+             CASE WHEN wp.duration_s > 0 THEN MIN(1.0, wp.position_s / wp.duration_s) ELSE 0 END AS progress
+      FROM (SELECT se.id AS seasonId, se.number AS seasonNumber, e.id AS episodeId, e.number, e.title, MIN(f.id) AS fileId
+            FROM seasons se JOIN episodes e ON e.season_id = se.id JOIN media_files f ON f.episode_id = e.id
+            WHERE se.series_id = ? GROUP BY e.id) x
+      LEFT JOIN watch_progress wp ON wp.file_id = x.fileId AND wp.user_id = ?
+      ORDER BY x.seasonNumber, x.number`).all(s.id, req.user!.id) as any[];
     const seasons = new Map<number, SeriesDetail["seasons"][number]>();
     for (const r of rows) {
       if (!seasons.has(r.seasonId)) seasons.set(r.seasonId, { id: r.seasonId, number: r.seasonNumber, episodes: [] });
-      seasons.get(r.seasonId)!.episodes.push({ id: r.episodeId, number: r.number, title: r.title, fileId: r.fileId });
+      seasons.get(r.seasonId)!.episodes.push({ id: r.episodeId, number: r.number, title: r.title, fileId: r.fileId, watched: !!r.watched, progress: r.progress });
     }
     return { id: s.id, title: s.title, seasons: [...seasons.values()] };
   });
@@ -141,6 +156,7 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
       next,
       relPath: f.relPath, sizeBytes: f.sizeBytes, container: f.container,
       durationS: f.durationS, bitrate: f.bitrate, streams,
+      resume: getProgress(db, req.user!.id, f.id),
     };
   });
 

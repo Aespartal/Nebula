@@ -2,10 +2,11 @@ export type LibraryType = "movies" | "series";
 
 export interface Library { id: number; name: string; type: LibraryType; rootPath: string }
 
-export interface MovieSummary { id: number; title: string; year: number | null; fileId: number }
-export interface SeriesSummary { id: number; title: string; seasons: number; episodes: number }
+/** `progress` es la fracción vista (0–1) para la barra de la tarjeta; `watched` si está marcada como vista. */
+export interface MovieSummary { id: number; title: string; year: number | null; fileId: number; watched: boolean; progress: number }
+export interface SeriesSummary { id: number; title: string; seasons: number; episodes: number; watchedEpisodes: number }
 
-export interface EpisodeItem { id: number; number: number; title: string | null; fileId: number }
+export interface EpisodeItem { id: number; number: number; title: string | null; fileId: number; watched: boolean; progress: number }
 export interface SeasonItem { id: number; number: number; episodes: EpisodeItem[] }
 export interface SeriesDetail { id: number; title: string; seasons: SeasonItem[] }
 
@@ -41,6 +42,8 @@ export interface MediaFileInfo {
   durationS: number | null;
   bitrate: number | null;
   streams: MediaStreamInfo[];
+  /** Estado de visionado del usuario actual. */
+  resume: WatchProgress;
 }
 
 export interface ScanStats { added: number; updated: number; unchanged: number; removed: number; skipped: number; failed: number }
@@ -91,4 +94,30 @@ export interface SystemInfo {
   profiles: string[];
   maxSessions: number;
   activeSessions: number;
+}
+
+// --- Cuentas (fase 4) ---
+
+export type Role = "admin" | "user";
+export interface SessionUser { id: number; username: string; role: Role }
+export interface User extends SessionUser { createdAt: number }
+export interface AuthStatus {
+  /** true si aún no existe ningún usuario: hay que crear el administrador. */
+  setupRequired: boolean;
+  user: SessionUser | null;
+}
+
+// --- Progreso (fase 4) ---
+
+export interface WatchProgress { positionS: number; durationS: number | null; watched: boolean }
+
+export interface ContinueItem {
+  fileId: number;
+  kind: "movie" | "episode";
+  title: string;
+  subtitle: string | null;
+  /** "resume": a medias; "next": siguiente episodio de una serie que ibas viendo. */
+  reason: "resume" | "next";
+  positionS: number;
+  durationS: number | null;
 }

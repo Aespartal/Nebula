@@ -69,7 +69,7 @@ Nebula controla un qBittorrent instalado **en el mismo equipo** (decisiones y pl
 
 **Si algo falla**
 - *«Usuario o contraseña incorrectos»*: tras 5 fallos qBittorrent bloquea la IP un rato; espera o reinícialo.
-- *El vídeo terminó pero no aparece*: Nebula deduce título, temporada y episodio del nombre del archivo; si no lo entiende, lo omite y lo deja anotado en el log (`nombre no reconocido`). Renombra el archivo (`Título (año)/Título (año).mkv`, `Serie/Temporada 1/Serie S01E02.mkv`) y vuelve a escanear desde Ajustes.
+- *El vídeo terminó pero no aparece*: Nebula deduce título, temporada y episodio del nombre del archivo; si no lo entiende, lo omite y lo deja anotado en el log (`nombre no reconocido`). Renombra el archivo (`Título (año)/Título (año).mkv`, `Serie/Temporada 1/Serie S01E02.mkv`) y pulsa «Buscar cambios» en Ajustes.
 - *Servicio de Windows*: el servicio de Nebula y qBittorrent deben tener permisos sobre las carpetas de las bibliotecas; usa rutas locales, no unidades de red.
 - Mientras qBittorrent no responde, Nebula no sabe qué descargas siguen incompletas; la extensión `.!qB` evita que se escaneen.
 

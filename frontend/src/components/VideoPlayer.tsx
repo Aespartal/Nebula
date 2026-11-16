@@ -245,7 +245,7 @@ export function VideoPlayer({ fileId, audioIdx, forceTranscode, setForceTranscod
       </p>
 
       {error && (
-        <div role="alert" className="mt-2 border-2 border-accent p-4">
+        <div role="alert" className="mt-2 rounded-ctl border border-danger bg-surface p-4">
           <p>{error}</p>
           <Button variant="secondary" className="mt-3" onClick={() => { retriesRef.current = 0; setError(null); setAttempt((a) => a + 1); }}>
             Intentarlo de nuevo

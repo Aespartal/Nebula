@@ -1,11 +1,14 @@
-export function PageHeading({ title, count }: { title: string; count?: number }) {
+export function PageHeading({ title, count, eyebrow }: { title: string; count?: number; eyebrow?: string }) {
   return (
-    <div className="mb-6 flex items-baseline gap-3">
-      <h1 tabIndex={-1} className="font-display text-4xl font-semibold leading-none tracking-tight outline-none md:text-5xl">
-        {title}
-      </h1>
+    <div className="mb-6 flex flex-col gap-1 border-b border-rule pb-5 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        {eyebrow && <div className="label">{eyebrow}</div>}
+        <h1 tabIndex={-1} className="text-2xl font-bold leading-tight tracking-tight outline-none md:text-3xl">{title}</h1>
+      </div>
       {count !== undefined && (
-        <span className="text-lg font-bold text-muted" aria-label={`${count} en total`}>{count}</span>
+        <span className="font-mono text-meta text-faint" aria-label={`${count} en total`}>
+          {count} {count === 1 ? "título" : "títulos"}
+        </span>
       )}
     </div>
   );

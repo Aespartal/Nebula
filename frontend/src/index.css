@@ -1,72 +1,44 @@
 @import "tailwindcss";
-@import "@fontsource-variable/fraunces/opsz.css";
 @import "@fontsource/atkinson-hyperlegible/400.css";
 @import "@fontsource/atkinson-hyperlegible/700.css";
-
-/*
-  Paleta "sala de cine": tonos cálidos, sin negro ni blanco puros.
-  Contrastes verificados (WCAG): texto >= 14:1, texto secundario >= 6.6:1,
-  acento >= 5.4:1 sobre el fondo, bordes de controles >= 3.6:1.
-*/
-:root {
-  --c-bg: #f6efe4;
-  --c-surface: #fffaf2;
-  --c-text: #231c16;
-  --c-muted: #5e5246;
-  --c-line: #8a7a6a;
-  --c-rule: color-mix(in srgb, #231c16 16%, transparent);
-  --c-accent: #b3330f;
-  --c-on-accent: #fffaf2;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --c-bg: #16120f;
-    --c-surface: #221c17;
-    --c-text: #f3ebe0;
-    --c-muted: #b9ab9a;
-    --c-line: #7a6c5e;
-    --c-rule: color-mix(in srgb, #f3ebe0 16%, transparent);
-    --c-accent: #ff8a5b;
-    --c-on-accent: #16120f;
-  }
-}
-
-@theme inline {
-  --font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
-  --font-sans: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --color-bg: var(--c-bg);
-  --color-surface: var(--c-surface);
-  --color-text: var(--c-text);
-  --color-muted: var(--c-muted);
-  --color-line: var(--c-line);
-  --color-rule: var(--c-rule);
-  --color-accent: var(--c-accent);
-  --color-on-accent: var(--c-on-accent);
-}
+@import "@fontsource-variable/jetbrains-mono/wght.css";
+@import "./styles/tokens.css";
 
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    background: var(--color-bg);
   }
   body {
-    background: var(--c-bg);
-    color: var(--c-text);
+    background: var(--color-bg);
+    color: var(--color-text);
     font-family: var(--font-sans);
-    font-size: 1.0625rem;
-    line-height: 1.55;
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection {
+    background: var(--color-accent);
+    color: var(--color-on-accent);
   }
   :focus-visible {
-    outline: 3px solid var(--c-accent);
-    outline-offset: 3px;
-    border-radius: 2px;
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-ctl);
   }
-  summary {
-    cursor: pointer;
-  }
-  /* Cifras alineadas a la línea base: más legibles (Fraunces usa elzevirianas por defecto). */
-  .font-display {
-    font-variant-numeric: lining-nums;
-  }
+  summary { cursor: pointer; }
+  /* Cifras de ancho fijo en todo lo que sea dato (tiempos, tamaños, contadores). */
+  .font-mono, .tabular { font-variant-numeric: tabular-nums; }
+}
+
+/* Etiqueta técnica: mono, mayúsculas, apagada. Se usa en cabeceras de sección y tablas. */
+@utility label {
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  line-height: var(--text-label--line-height);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-faint);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -75,4 +47,18 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Piezas repetidas, definidas con tokens (no con colores sueltos). */
+@utility field {
+  @apply min-h-[var(--control-h)] w-full min-w-0 rounded-ctl border border-line bg-surface px-3 py-2 text-meta text-text placeholder:text-faint focus:border-muted;
+}
+@utility msg-error {
+  @apply border-l-2 border-danger py-1 pl-3 text-meta font-bold text-danger;
+}
+@utility msg-info {
+  @apply border-l-2 border-line py-1 pl-3 text-meta font-bold text-text;
+}
+@utility panel {
+  @apply rounded-ctl border border-rule bg-surface p-5;
 }

@@ -35,8 +35,8 @@ export function MetadataSection() {
   }
 
   return (
-    <section aria-labelledby="meta" className="mt-12 max-w-2xl">
-      <h2 id="meta" className="font-display text-2xl font-semibold">Carátulas y sinopsis</h2>
+    <section aria-labelledby="meta" className="mt-10 max-w-2xl border-t border-rule pt-8">
+      <h2 id="meta" className="text-lg font-bold tracking-tight">Carátulas y sinopsis</h2>
       {loading && !st && <Loading />}
       {error && <ErrorBox message={error} onRetry={reload} />}
 
@@ -70,8 +70,8 @@ export function MetadataSection() {
           </div>
           <p className="mt-2 text-muted">Nebula también busca solo cuando se añaden títulos nuevos. Lo que no se encuentra se reintenta cada semana.</p>
           <div role={st.lastError ? "alert" : "status"} className="mt-2 min-h-7">
-            {st.lastError ? <p className="border-l-4 border-accent py-1 pl-4 font-bold text-accent">{ERRORS[st.lastError]}</p>
-              : (st.running || msg) && <p className="border-l-4 border-line py-1 pl-4 font-bold">{st.running ? "Buscando… puede tardar unos minutos si tienes muchos títulos." : msg}</p>}
+            {st.lastError ? <p className="msg-error">{ERRORS[st.lastError]}</p>
+              : (st.running || msg) && <p className="msg-info">{st.running ? "Buscando… puede tardar unos minutos si tienes muchos títulos." : msg}</p>}
           </div>
         </>
       )}

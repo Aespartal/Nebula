@@ -176,4 +176,24 @@ export function registerRoutes(app: FastifyInstance, db: Db, onScanned: () => vo
     if (!s) return reply.code(404).send({ error: "file_missing" });
     return sendRanged(req, reply, { absPath: f.path, sizeBytes: s.size, ext: path.extname(f.path).toLowerCase() });
   });
+
+  // Descarga del archivo original (cualquier usuario con sesión). Solo por id de BD; admite Range para reanudar.
+  app.get<{ Params: { id: string } }>("/api/files/:id/download", async (req, reply) => {
+    const f = db.prepare("SELECT path FROM media_files WHERE id=?").get(Number(req.params.id)) as
+      | { path: string } | undefined;
+    if (!f) return reply.code(404).send({ error: "not_found" });
+    const s = await stat(f.path).catch(() => null);
+    if (!s) return reply.code(404).send({ error: "file_missing" });
+    reply.header("Content-Disposition", attachmentHeader(path.basename(f.path)));
+    reply.header("X-Content-Type-Options", "nosniff");
+    return sendRanged(req, reply, { absPath: f.path, sizeBytes: s.size, ext: path.extname(f.path).toLowerCase() });
+  });
+}
+
+/** Content-Disposition seguro: nombre ASCII de respaldo + filename* (RFC 5987) con el nombre real. */
+export function attachmentHeader(name: string): string {
+  const clean = name.replace(/[\u0000-\u001f\u007f]/g, "");
+  const ascii = clean.replace(/[^\x20-\x7e]|["\\%;]/g, "_");
+  const utf8 = encodeURIComponent(clean).replace(/['()*]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${utf8}`;
 }

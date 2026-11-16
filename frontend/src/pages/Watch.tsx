@@ -118,6 +118,10 @@ function WatchContent({ info }: { info: MediaFileInfo }) {
         <Button variant="secondary" aria-pressed={isWatched} onClick={toggleWatched}>
           <Icon name="check" className="size-5" /> {isWatched ? "Vista · quitar marca" : "Marcar como vista"}
         </Button>
+        <a href={`/api/files/${info.id}/download`} download
+          className="inline-flex min-h-[var(--control-h)] items-center justify-center gap-2 rounded-ctl border border-line bg-surface px-4 text-meta font-bold text-text transition-colors hover:border-muted hover:bg-raised">
+          <Icon name="download" className="size-5" /> Descargar archivo <span className="font-normal text-muted">({formatSize(info.sizeBytes)})</span>
+        </a>
         {info.next && (
           <LinkButton ref={nextRef} to={`/ver/${info.next.fileId}`} className="w-full sm:w-auto">
             <Icon name="play" className="size-5" /> Siguiente: {info.next.label}

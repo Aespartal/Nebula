@@ -8,6 +8,26 @@ import { parseMedia, type Parsed } from "./parser.js";
 
 export interface LibraryRow { id: number; name: string; type: "movies" | "series"; root_path: string }
 
+/**
+ * Rutas que el escaneo debe ignorar por ahora (descargas sin terminar). Así un vídeo a medias nunca entra en el catálogo,
+ * aunque el vigilante o un escaneo manual coincidan con una descarga en curso.
+ */
+let isBusyPath: (absPath: string) => boolean = () => false;
+export function setScanExclusion(fn: (absPath: string) => boolean) { isBusyPath = fn; }
+
+/** Rutas absolutas de las descargas sin terminar → predicado para el escáner (comparación sin mayúsculas y con / o \\). */
+export function incompletePathFilter(list: () => { savePath: string; name: string; done: boolean }[]) {
+  const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  return (abs: string) => {
+    const a = norm(abs);
+    return list().some((t) => {
+      if (t.done) return false;
+      const c = `${norm(t.savePath)}/${norm(t.name)}`;
+      return a === c || a.startsWith(c + "/");
+    });
+  };
+}
+
 async function* walk(dir: string): AsyncGenerator<string> {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
@@ -142,6 +162,8 @@ async function doScan(db: Db, lib: LibraryRow): Promise<ScanStats> {
   for await (const file of walk(lib.root_path)) {
     if (!VIDEO_EXTS.has(path.extname(file).toLowerCase())) continue;
     seen.add(file);
+    // Descarga sin terminar: no se toca (ni se añade ni se borra lo que ya hubiera).
+    if (isBusyPath(file)) { stats.skipped++; continue; }
     const s = await stat(file);
     const prev = existing.get(file);
     if (prev && prev.size_bytes === s.size && prev.mtime_ms === Math.floor(s.mtimeMs)) {

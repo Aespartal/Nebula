@@ -47,15 +47,33 @@ Limitación actual: no hay *remux* (copiar el vídeo sin recodificar cuando solo
 
 La pestaña **Sistema** muestra las conversiones de FFmpeg en curso (con qué ruta, GPU o CPU, y hasta dónde va cada una; se pueden detener) y el almacenamiento de cada carpeta: vídeo que ocupa, uso del disco y espacio libre.
 
-## Descargas (en preparación)
+## Descargas (administradores)
 
-Nebula controlará un qBittorrent instalado en el mismo equipo (plan en [`docs/plan-descargas.md`](docs/plan-descargas.md)).
-Con `TORRENT_USER` y `TORRENT_PASS` en el `.env`, la API de administrador ya permite añadir (magnet o archivo `.torrent`, nunca una URL), pausar, reanudar y quitar descargas, con o sin sus archivos; la pantalla llega en el siguiente paso. Solo se gestionan las descargas que añade Nebula, no el resto de lo que tengas en qBittorrent. Nebula se niega a añadir si en el disco de descargas no queda margen libre (`TORRENT_MIN_FREE_GB`, 5 GB por defecto). Para configurar y comprobar la conexión:
+Nebula controla un qBittorrent instalado **en el mismo equipo** (decisiones y plan en [`docs/plan-descargas.md`](docs/plan-descargas.md)). Solo los administradores ven la pestaña **Descargas**.
 
-1. En qBittorrent: *Herramientas → Opciones → Interfaz web*, activa la interfaz, deja la dirección en `127.0.0.1` y pon usuario y contraseña.
-2. En `.env`: `TORRENT_URL` (por defecto `http://127.0.0.1:8080`), `TORRENT_USER` y `TORRENT_PASS`.
-3. Recomendado en qBittorrent (*Opciones → Descargas*): carpeta de descargas completas, otra para las descargas en curso («Mantener los torrents incompletos en») y modo de gestión de torrents **Automático**. En *Opciones → BitTorrent → Límites de compartición*: ratio 1,0 y 1440 min, y «Parar torrents» al llegar. En un disco mecánico conviene limitar la velocidad de bajada (*Opciones → Velocidad*).
-4. Ejecuta `npm run torrents:doctor`: comprueba la conexión, lee las carpetas y la configuración de siembra, y prueba a crear y borrar una categoría temporal.
+**Qué permite**
+- Añadir por enlace magnet o archivo `.torrent` (nunca una URL) y elegir si es Película o Serie: la descarga va a la carpeta de esa biblioteca.
+- Ver progreso, velocidad y tiempo restante; pausar, reanudar y quitar. Quitar puede dejar los archivos o borrarlos también (pide confirmación).
+- Al terminar, el vídeo entra solo en el catálogo; un vídeo a medias nunca aparece.
+- Cualquier usuario puede usar **Descargar archivo** en la página de reproducción para bajarse el original (admite reanudar).
+- Solo se gestionan las descargas que añade Nebula, no el resto de lo que haya en qBittorrent. Si en el disco no queda margen libre (`TORRENT_MIN_FREE_GB`, 5 GB por defecto) se niega a añadir.
+
+**Configuración**
+1. En qBittorrent: *Herramientas → Opciones → Interfaz web*, activa la interfaz, deja la dirección en `127.0.0.1` y pon usuario y contraseña. No la expongas fuera del equipo.
+2. En `.env`: `TORRENT_URL` (por defecto `http://127.0.0.1:8080`), `TORRENT_USER` y `TORRENT_PASS`. El `.env` se lee al arrancar: reinicia Nebula tras cambiarlo.
+3. Recomendado en qBittorrent:
+   - *Descargas*: carpeta de descargas completas, otra para «Mantener los torrents incompletos en», **«Añadir extensión .!qB a los archivos incompletos»** y gestión de torrents **Automático**.
+   - *BitTorrent → Límites de compartición*: ratio 1,0 y 1440 min, y «Parar torrents» al llegar.
+   - *Velocidad*: en un disco mecánico, limita la bajada para no saturarlo.
+4. Ejecuta `npm run torrents:doctor`: comprueba conexión, carpetas y siembra, y prueba a crear y borrar una categoría temporal.
+
+**Si algo falla**
+- *«Usuario o contraseña incorrectos»*: tras 5 fallos qBittorrent bloquea la IP un rato; espera o reinícialo.
+- *El vídeo terminó pero no aparece*: Nebula deduce título, temporada y episodio del nombre del archivo; si no lo entiende, lo omite y lo deja anotado en el log (`nombre no reconocido`). Renombra el archivo (`Título (año)/Título (año).mkv`, `Serie/Temporada 1/Serie S01E02.mkv`) y pulsa «Buscar cambios» en Ajustes.
+- *Servicio de Windows*: el servicio de Nebula y qBittorrent deben tener permisos sobre las carpetas de las bibliotecas; usa rutas locales, no unidades de red.
+- Mientras qBittorrent no responde, Nebula no sabe qué descargas siguen incompletas; la extensión `.!qB` evita que se escaneen.
+
+**Aviso legal**: lo que se descarga es responsabilidad del administrador. Si tu tráfico lo requiere, usa una VPN.
 
 ## Subtítulos y audio
 

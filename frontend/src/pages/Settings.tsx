@@ -2,6 +2,7 @@ import { useId, useState, type FormEvent } from "react";
 import type { Library, LibraryType, ScanStats } from "@nebula/shared";
 import { Button } from "../components/Button";
 import { AccountSection } from "../components/AccountSection";
+import { MetadataSection } from "../components/MetadataSection";
 import { PageHeading } from "../components/PageHeading";
 import { UsersSection } from "../components/UsersSection";
 import { useUser } from "../lib/auth";
@@ -62,12 +63,12 @@ function LibrariesSection() {
     setMessage({ kind: "ok", text: `Carpeta añadida. ${scan.ok ? describeScan([scan.data]) : "No se pudo hacer la primera búsqueda; pulsa «Buscar cambios»."}` });
   }
 
-  const field = "min-h-12 w-full rounded-md border-2 border-line bg-surface px-3 py-2 text-text";
+  const field = "field";
 
   return (
     <>
-      <section aria-labelledby="carpetas" className="mt-12 max-w-2xl">
-        <h2 id="carpetas" className="font-display text-2xl font-semibold">Tus carpetas</h2>
+      <section aria-labelledby="carpetas" className="mt-10 max-w-2xl border-t border-rule pt-8">
+        <h2 id="carpetas" className="text-lg font-bold tracking-tight">Tus carpetas</h2>
         {libs.loading && <Loading />}
         {libs.error && <ErrorBox message={libs.error} onRetry={libs.reload} />}
         {libs.data && libs.data.length === 0 && <p className="mt-2 text-muted">Aún no has añadido ninguna.</p>}
@@ -92,22 +93,22 @@ function LibrariesSection() {
         <p className="mt-2 text-muted">Úsalo cuando copies películas o capítulos nuevos a las carpetas.</p>
       </section>
 
-      <section aria-labelledby="nueva" className="mt-12 max-w-2xl">
-        <h2 id="nueva" className="font-display text-2xl font-semibold">Añadir una carpeta</h2>
+      <section aria-labelledby="nueva" className="mt-10 max-w-2xl border-t border-rule pt-8">
+        <h2 id="nueva" className="text-lg font-bold tracking-tight">Añadir una carpeta</h2>
         <form onSubmit={addLibrary} className="mt-4 space-y-5">
           <div>
-            <label htmlFor={ids.name} className="mb-1 block font-bold">Nombre</label>
+            <label htmlFor={ids.name} className="mb-1 block text-meta font-bold text-soft">Nombre</label>
             <input id={ids.name} className={field} value={name} onChange={(e) => setName(e.target.value)} required autoComplete="off" />
           </div>
           <div>
-            <label htmlFor={ids.type} className="mb-1 block font-bold">Qué contiene</label>
+            <label htmlFor={ids.type} className="mb-1 block text-meta font-bold text-soft">Qué contiene</label>
             <select id={ids.type} className={field} value={type} onChange={(e) => setType(e.target.value as LibraryType)}>
               <option value="movies">Películas</option>
               <option value="series">Series</option>
             </select>
           </div>
           <div>
-            <label htmlFor={ids.path} className="mb-1 block font-bold">Ruta de la carpeta</label>
+            <label htmlFor={ids.path} className="mb-1 block text-meta font-bold text-soft">Ruta de la carpeta</label>
             <input id={ids.path} className={field} value={rootPath} onChange={(e) => setRootPath(e.target.value)}
               required autoComplete="off" spellCheck={false} aria-describedby={ids.hint} />
             <p id={ids.hint} className="mt-1 text-muted">
@@ -122,7 +123,7 @@ function LibrariesSection() {
 
       <div role={message?.kind === "error" ? "alert" : "status"} className="mt-6 max-w-2xl">
         {message && (
-          <p className={`border-l-4 py-1 pl-4 font-bold ${message.kind === "error" ? "border-accent text-accent" : "border-line"}`}>
+          <p className={`${message.kind === "error" ? "msg-error" : "msg-info"}`}>
             {message.text}
           </p>
         )}
@@ -142,6 +143,7 @@ export default function Settings() {
         <>
           <UsersSection />
           <LibrariesSection />
+          <MetadataSection />
         </>
       )}
     </>

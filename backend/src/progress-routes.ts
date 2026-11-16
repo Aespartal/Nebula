@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ContinueItem, WatchProgress } from "@nebula/shared";
 import type { Db } from "./db/index.js";
-import { continueWatching, getProgress, saveProgress, setSeriesWatched, setWatched } from "./progress.js";
+import { continueWatching, getProgress, saveProgress, setSeasonWatched, setSeriesWatched, setWatched } from "./progress.js";
 
 const body = {
   type: "object", required: ["positionS"], additionalProperties: false,
@@ -27,6 +27,14 @@ export function registerProgressRoutes(app: FastifyInstance, db: Db) {
   app.post<{ Params: { id: string }; Body: { watched: boolean } }>(
     "/api/progress/:id/watched", { schema: { body: watchedBody } },
     async (req, reply) => setWatched(db, req.user!.id, Number(req.params.id), req.body.watched) ?? reply.code(404).send({ error: "not_found" }),
+  );
+
+  app.post<{ Params: { id: string }; Body: { watched: boolean } }>(
+    "/api/seasons/:id/watched", { schema: { body: watchedBody } },
+    async (req, reply) => {
+      if (!db.prepare("SELECT 1 FROM seasons WHERE id=?").get(Number(req.params.id))) return reply.code(404).send({ error: "not_found" });
+      return { updated: setSeasonWatched(db, req.user!.id, Number(req.params.id), req.body.watched) };
+    },
   );
 
   app.post<{ Params: { id: string }; Body: { watched: boolean } }>(

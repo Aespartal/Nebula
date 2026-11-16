@@ -17,16 +17,18 @@ async function* walk(dir: string): AsyncGenerator<string> {
 }
 
 /** Subtítulos externos junto al vídeo: "Peli.es.srt", "Peli.srt". */
-async function findExternalSubs(videoPath: string) {
+async function findExternalSubs(videoPath: string, dirCache?: Map<string, string[]>) {
   const dir = path.dirname(videoPath);
   const base = path.basename(videoPath, path.extname(videoPath));
-  const out: { path: string; language: string | null; title: string }[] = [];
-  for (const name of await readdir(dir)) {
+  const out: { path: string; language: string | null; title: string; forced: boolean }[] = [];
+  let names = dirCache?.get(dir);
+  if (!names) { names = await readdir(dir); dirCache?.set(dir, names); }
+  for (const name of names) {
     const ext = path.extname(name).toLowerCase();
     if (!SUB_EXTS.has(ext) || !name.startsWith(base + ".")) continue;
     const middle = name.slice(base.length + 1, name.length - ext.length); // "es" | "" | "es.forced"
     const lang = /^[a-z]{2,3}\b/i.exec(middle)?.[0].toLowerCase() ?? null;
-    out.push({ path: path.join(dir, name), language: lang, title: name });
+    out.push({ path: path.join(dir, name), language: lang, title: name, forced: /forced|forzad/i.test(middle) });
   }
   return out;
 }
@@ -82,6 +84,25 @@ function resolveEntity(st: Stmts, lib: LibraryRow, parsed: Parsed) {
   return { movie_id: null, episode_id: episodeId };
 }
 
+/** Deja las pistas externas de un archivo igual que los .srt/.vtt/.ass que hay ahora al lado. Devuelve true si hubo cambios. */
+function syncExternalSubs(db: Db, st: Stmts, fileId: number, subs: Subs): boolean {
+  const have = (db.prepare("SELECT external_path AS p FROM media_streams WHERE file_id=? AND is_external=1").all(fileId) as { p: string }[])
+    .map((r) => r.p).sort();
+  const want = subs.map((s) => s.path).sort();
+  if (have.length === want.length && have.every((p, i) => p === want[i])) return false;
+  const base = { file_id: fileId, profile: null, pix_fmt: null, width: null, height: null, channels: null };
+  db.transaction(() => {
+    db.prepare("DELETE FROM media_streams WHERE file_id=? AND is_external=1").run(fileId);
+    subs.forEach((sub, i) =>
+      st.insertStream.run({
+        ...base, idx: 1000 + i, kind: "subtitle", codec: path.extname(sub.path).slice(1).toLowerCase(),
+        language: sub.language, title: sub.title, is_default: 0, is_forced: +sub.forced,
+        is_external: 1, external_path: sub.path,
+      }));
+  })();
+  return true;
+}
+
 function cleanupOrphans(db: Db) {
   db.exec(`
     DELETE FROM movies WHERE id NOT IN (SELECT movie_id FROM media_files WHERE movie_id IS NOT NULL);
@@ -115,6 +136,7 @@ async function doScan(db: Db, lib: LibraryRow): Promise<ScanStats> {
     existing.set(r.path, r);
   }
 
+  const dirCache = new Map<string, string[]>();
   const seen = new Set<string>();
   const todo: { file: string; size: number; mtimeMs: number; isNew: boolean }[] = [];
   for await (const file of walk(lib.root_path)) {
@@ -123,7 +145,9 @@ async function doScan(db: Db, lib: LibraryRow): Promise<ScanStats> {
     const s = await stat(file);
     const prev = existing.get(file);
     if (prev && prev.size_bytes === s.size && prev.mtime_ms === Math.floor(s.mtimeMs)) {
-      stats.unchanged++;
+      // El vídeo no cambió, pero pudieron añadirse o quitarse subtítulos externos junto a él: se sincronizan sin repetir ffprobe.
+      if (syncExternalSubs(db, st, prev.id, await findExternalSubs(file, dirCache))) stats.updated++;
+      else stats.unchanged++;
       continue;
     }
     todo.push({ file, size: s.size, mtimeMs: Math.floor(s.mtimeMs), isNew: !prev });
@@ -141,7 +165,7 @@ async function doScan(db: Db, lib: LibraryRow): Promise<ScanStats> {
     let subs: Subs;
     try {
       probed = await probe(t.file);
-      subs = await findExternalSubs(t.file);
+      subs = await findExternalSubs(t.file, dirCache);
     } catch (err) {
       stats.failed++;
       console.warn(`[scan] ffprobe falló en ${relPath}: ${(err as Error).message.split("\n")[0]}`);
@@ -165,8 +189,8 @@ async function doScan(db: Db, lib: LibraryRow): Promise<ScanStats> {
       }
       subs.forEach((sub, i) =>
         st.insertStream.run({
-          ...base, idx: 1000 + i, kind: "subtitle", codec: path.extname(sub.path).slice(1),
-          language: sub.language, title: sub.title, is_default: 0, is_forced: 0,
+          ...base, idx: 1000 + i, kind: "subtitle", codec: path.extname(sub.path).slice(1).toLowerCase(),
+          language: sub.language, title: sub.title, is_default: 0, is_forced: +sub.forced,
           is_external: 1, external_path: sub.path,
         }),
       );

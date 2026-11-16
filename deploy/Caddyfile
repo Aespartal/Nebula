@@ -1,0 +1,10 @@
+# Proxy inverso con HTTPS automático (Let's Encrypt). Sustituye el dominio por el tuyo.
+# Requisitos: el dominio apunta a tu IP pública y los puertos 80 y 443 llegan a este equipo.
+# Arranca Nebula con TRUST_PROXY=1 (y HOST=127.0.0.1: así solo Caddy puede llegar a él).
+nebula.tudominio.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3000 {
+		# El vídeo se envía en trozos: no hay que esperar a tenerlo entero
+		flush_interval -1
+	}
+}

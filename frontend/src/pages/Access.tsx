@@ -32,13 +32,13 @@ export function PasswordField({ label, value, onChange, autoComplete, hint, id: 
   const [show, setShow] = useState(false);
   return (
     <div>
-      <label htmlFor={id} className="mb-1 block font-bold">{label}</label>
+      <label htmlFor={id} className="mb-1 block text-meta font-bold text-soft">{label}</label>
       <div className="flex gap-2">
         <input id={id} type={show ? "text" : "password"} value={value} onChange={(e) => onChange(e.target.value)}
           required autoComplete={autoComplete} spellCheck={false} autoCapitalize="none" aria-describedby={hint ? `${id}-hint` : undefined}
-          className="min-h-12 w-full min-w-0 rounded-md border-2 border-line bg-surface px-3 py-2 text-text" />
+          className="field" />
         <button type="button" aria-pressed={show} onClick={() => setShow(!show)}
-          className="min-h-12 shrink-0 rounded-md border-2 border-line px-3 font-bold hover:bg-surface">
+          className="min-h-[var(--control-h)] shrink-0 rounded-ctl border border-line px-3 text-meta font-bold hover:border-muted hover:bg-raised">
           {show ? "Ocultar" : "Mostrar"}
         </button>
       </div>
@@ -47,7 +47,7 @@ export function PasswordField({ label, value, onChange, autoComplete, hint, id: 
   );
 }
 
-const field = "min-h-12 w-full rounded-md border-2 border-line bg-surface px-3 py-2 text-text";
+const field = "field";
 
 /** Pantalla única para el primer arranque (crear administrador) y para iniciar sesión. */
 export default function Access({ mode }: { mode: "setup" | "login" }) {
@@ -75,9 +75,9 @@ export default function Access({ mode }: { mode: "setup" | "login" }) {
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-5 py-10">
-      <p className="font-display text-5xl font-semibold tracking-tight" aria-hidden="true">Nebula<span className="text-accent">.</span></p>
+      <p className="text-sm font-bold tracking-wordmark" aria-hidden="true">NEBULA</p>
       <main id="contenido" className="mt-8">
-        <h1 ref={h1} tabIndex={-1} className="font-display text-3xl font-semibold leading-tight outline-none">
+        <h1 ref={h1} tabIndex={-1} className="text-2xl font-bold leading-tight tracking-tight outline-none">
           {setup ? "Crea tu cuenta de administrador" : "Iniciar sesión"}
         </h1>
         {setup && (
@@ -88,7 +88,7 @@ export default function Access({ mode }: { mode: "setup" | "login" }) {
 
         <form onSubmit={submit} className="mt-6 space-y-5">
           <div>
-            <label htmlFor={userId} className="mb-1 block font-bold">Usuario</label>
+            <label htmlFor={userId} className="mb-1 block text-meta font-bold text-soft">Usuario</label>
             <input id={userId} className={field} value={username} onChange={(e) => setUsername(e.target.value)} required
               autoComplete="username" autoCapitalize="none" spellCheck={false} />
           </div>
@@ -98,7 +98,7 @@ export default function Access({ mode }: { mode: "setup" | "login" }) {
           {setup && <PasswordField label="Repite la contraseña" value={again} onChange={setAgain} autoComplete="new-password" id={againId} />}
 
           <div role="alert" className="empty:hidden">
-            {error && <p className="border-l-4 border-accent py-1 pl-4 font-bold text-accent">{error}</p>}
+            {error && <p className="msg-error">{error}</p>}
           </div>
 
           <Button type="submit" disabled={busy} aria-busy={busy} className="w-full">

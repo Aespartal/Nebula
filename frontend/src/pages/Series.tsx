@@ -31,12 +31,12 @@ export default function Series() {
           <SearchBox label="Buscar en series" value={q} onChange={setQ} />
           <p role="status" className="sr-only">{q ? plural(list.length, "resultado", "resultados") : ""}</p>
           {list.length === 0 ? (
-            <p className="py-8 text-muted">No hay ninguna serie que se llame así.</p>
+            <p className="py-8 text-meta text-muted">No hay ninguna serie que se llame así.</p>
           ) : (
             <ul className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {list.map((s) => (
                 <li key={s.id}>
-                  <TitleCard to={`/series/${s.id}`} title={s.title} kind="Serie"
+                  <TitleCard to={`/series/${s.id}`} title={s.title} kind="Serie" poster={s.hasPoster ? `/api/posters/series/${s.id}` : null}
                     watched={s.watchedEpisodes === s.episodes && s.episodes > 0} progress={s.episodes ? s.watchedEpisodes / s.episodes : 0}
                     meta={`${plural(s.seasons, "temporada", "temporadas")} · ${plural(s.episodes, "episodio", "episodios")}${s.watchedEpisodes ? ` · ${plural(s.watchedEpisodes, "visto", "vistos")}` : ""}`} />
                 </li>

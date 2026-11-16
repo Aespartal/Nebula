@@ -18,7 +18,7 @@ También puedes añadir carpetas desde la propia app (Ajustes). Requisitos: Node
 
 Variables: `PORT`, `HOST` (por defecto `127.0.0.1`; `0.0.0.0` para la red local), `DATA_DIR`, `MOVIES_DIR`, `SERIES_DIR`,
 `FFMPEG_PATH`, `FFPROBE_PATH`, `HLS_DIR` (temporales de conversión), `MAX_TRANSCODES` (sesiones simultáneas, 3 por defecto),
-`TRUST_PROXY=1` (cuando haya un proxy inverso delante).
+`TRUST_PROXY=1` (cuando haya un proxy inverso delante), `TLS_CERT`/`TLS_KEY`, `WATCH`, `WATCH_DEBOUNCE_MS`, `SCAN_INTERVAL_MINUTES`.
 
 ## Cuentas y seguridad
 
@@ -27,7 +27,8 @@ Variables: `PORT`, `HOST` (por defecto `127.0.0.1`; `0.0.0.0` para la red local)
 - **Contraseñas**: `scrypt` con sal propia (viene con Node, no hay que compilar nada). Mínimo 8 caracteres.
 - **Sesiones**: cookie `HttpOnly` + `SameSite=Lax` (y `Secure` en HTTPS); en la base de datos solo se guarda el hash del token. Caducan a los 30 días sin uso, se revocan al cerrar sesión, al cambiar la contraseña y al borrar la cuenta. Como el vídeo va por el mismo origen, `<video>` y hls.js envían la cookie solos: no hacen falta URLs firmadas.
 - **Protección**: toda la API (vídeo incluido) exige sesión salvo `/api/health` y el acceso; bloqueo temporal tras 5 intentos fallidos; las peticiones que cambian datos desde otro origen se rechazan (CSRF); no hay CORS.
-- **Antes de abrirlo a Internet** hace falta HTTPS (fase 6): sin cifrado, la contraseña y la cookie viajan en claro.
+- **Antes de abrirlo a Internet** hace falta HTTPS (ver «Publicar en Internet»): sin cifrado, la contraseña y la cookie viajan en claro. Si escuchas en la red sin HTTPS ni proxy, Nebula lo avisa en el registro.
+- **Cabeceras**: política de contenido estricta (CSP), `nosniff`, sin incrustación en otras webs (`frame-ancestors 'none'`), `Referrer-Policy: no-referrer` y HSTS cuando la conexión es HTTPS.
 - Si pierdes la contraseña del único administrador: borra la fila de `users` de `data/nebula.db` y vuelve a abrir Nebula para repetir el alta.
 
 ## Reproducción y conversión
@@ -41,6 +42,51 @@ El navegador informa de lo que sabe reproducir y el servidor decide:
 
 **Diagnóstico:** `npm run doctor` comprueba FFmpeg, la tarjeta NVIDIA y prueba de verdad cada ruta de conversión.
 Limitación actual: no hay *remux* (copiar el vídeo sin recodificar cuando solo falla el audio o el contenedor); siempre se recodifica.
+
+## Subtítulos y audio
+
+- Subtítulos de texto (SRT, ASS/SSA, mov_text, WebVTT), incrustados o en archivos externos junto al vídeo, se convierten a WebVTT al vuelo y se guardan en caché. Los de imagen (PGS, DVD) no se pueden mostrar en el navegador y aparecen desactivados.
+- En el reproductor eliges subtítulo y pista de audio; Nebula recuerda tu idioma preferido en ese navegador.
+
+## Carátulas y sinopsis (TMDB)
+
+Opcional. Con una clave gratuita de [TMDB](https://www.themoviedb.org/settings/api), Nebula añade carátulas y sinopsis.
+
+- `TMDB_API_KEY`: clave de API (v3) o token de acceso de lectura (v4). En Windows (cmd): `set TMDB_API_KEY=tu_clave`.
+- `TMDB_LANGUAGE`: idioma de los datos, por defecto `es-ES`.
+- A TMDB solo se envían título y año. Las carátulas se descargan una vez y se sirven desde Nebula.
+- Estado y búsqueda manual: Ajustes → «Carátulas y sinopsis» (solo administradores).
+
+This product uses the TMDB API but is not endorsed or certified by TMDB.
+
+## Configuración con `.env`
+
+Copia `.env.example` a `.env` (junto a `package.json`) y arranca con `npm start` (compila la web y lanza el servidor).
+Así no hace falta `set` en cada sesión. `npm run dev:backend` también lo lee.
+
+## Carpetas vigiladas
+
+Nebula escanea sola cuando copias, cambias o borras vídeos y subtítulos: espera 10 s de calma tras el último cambio (para no leer
+una copia a medias) y hace un escaneo incremental. `WATCH=0` lo desactiva; `WATCH_DEBOUNCE_MS` ajusta la espera.
+En carpetas de red (SMB/NFS) el sistema no avisa de los cambios: usa `SCAN_INTERVAL_MINUTES=30` para un escaneo periódico.
+
+## Publicar en Internet
+
+Elige una opción; en las dos, **no abras el puerto de Nebula directamente**.
+
+1. **Proxy inverso con HTTPS automático (recomendado):** [Caddy](https://caddyserver.com) obtiene y renueva el certificado solo.
+   Usa `deploy/Caddyfile`, arranca Nebula con `HOST=127.0.0.1` y `TRUST_PROXY=1`, y abre en el router solo los puertos 80 y 443 hacia Caddy.
+2. **HTTPS directo:** `TLS_CERT` y `TLS_KEY` (PEM). Para la red local sirve [mkcert](https://github.com/FiloSottile/mkcert); un certificado
+   autofirmado funciona, pero cada navegador mostrará un aviso.
+
+Antes de exponerlo: contraseñas largas (mínimo 8, mejor una frase), solo las cuentas necesarias, y actualiza Node y FFmpeg.
+
+## Arrancar con el equipo
+
+- **Windows:** `deploy/windows/instalar-servicio.ps1` instala Nebula como servicio con [NSSM](https://nssm.cc) (arranca con Windows, rota el registro en `data/nebula.log`). Gestión día a día, actualizar y solución de problemas: [`docs/servicio-windows.md`](docs/servicio-windows.md).
+  Una alternativa sin NSSM: Programador de tareas → «Al iniciar el sistema» → `npm start` en la carpeta del proyecto.
+- **Docker:** `docker-compose.yml` y `Dockerfile` (Node 22 + FFmpeg). Monta tus carpetas en solo lectura y añádelas en Ajustes con la ruta de dentro del contenedor.
+  La GPU NVIDIA en Docker requiere NVIDIA Container Toolkit; en Windows, lo más fiable para NVENC es ejecutarlo directamente (sin Docker).
 
 ## Estructura
 

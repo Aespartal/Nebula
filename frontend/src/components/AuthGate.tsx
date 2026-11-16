@@ -11,7 +11,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (state.phase === "error") {
     return (
       <div role="alert" className="mx-auto max-w-md px-5 pt-24">
-        <p className="font-display text-3xl font-semibold">No se pudo conectar</p>
+        <p className="text-2xl font-bold tracking-tight">No se pudo conectar</p>
         <p className="mt-2 text-muted">El servidor de Nebula no responde. Comprueba que está encendido.</p>
         <Button className="mt-5" onClick={retry}>Reintentar</Button>
       </div>

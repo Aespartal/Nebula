@@ -1,0 +1,59 @@
+/*
+  Tokens de diseño de Nebula: ÚNICA fuente de verdad (ver design.md).
+  Tailwind los convierte en utilidades (bg-surface, text-muted, rounded-ctl, text-label…)
+  y siguen disponibles como variables CSS (var(--color-bg)…).
+  Para cambiar el aspecto de toda la app se edita este archivo; `npm run tokens` comprueba los contrastes.
+*/
+@theme {
+  /* ---- Color: superficies (de más oscura a más clara) ---- */
+  --color-bg: #0a0a0b;        /* fondo de página */
+  --color-surface: #111113;   /* tarjetas, paneles, campos */
+  --color-raised: #18181b;    /* pestaña activa, hover de filas, chips */
+  --color-track: #27272a;     /* carriles de barras de progreso */
+
+  /* ---- Color: líneas ---- */
+  --color-rule: #1f1f23;        /* separadores y bordes decorativos (1 px) */
+  --color-rule-strong: #3f3f46; /* borde decorativo en hover */
+  --color-line: #6a6a73;        /* borde de CONTROLES (campos, botones): ≥ 3:1 */
+
+  /* ---- Color: texto ---- */
+  --color-text: #f4f4f5;
+  --color-soft: #e4e4e7;
+  --color-muted: #a1a1aa;
+  --color-faint: #8b8b94;       /* el #71717a del diseño original no llega a AA en texto pequeño */
+
+  /* ---- Color: acción y estado ---- */
+  --color-accent: #f4f4f5;      /* acción principal: botón sólido casi blanco */
+  --color-on-accent: #0a0a0b;
+  --color-ok: #16a34a;          /* reproducción directa, completado, en línea */
+  --color-warn: #d97706;        /* trabajo en curso, aviso */
+  --color-danger: #f87171;      /* error */
+  --color-scrim: rgb(10 10 11 / 0.75); /* velo sobre carátulas y detrás de paneles */
+
+  /* ---- Tipografía ---- */
+  --font-sans: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
+  --text-label: 0.6875rem;      /* 11 px: etiquetas en mono mayúsculas */
+  --text-label--line-height: 1rem;
+  --text-meta: 0.75rem;         /* 12 px: datos secundarios */
+  --text-meta--line-height: 1.125rem;
+  --text-body: 0.9375rem;       /* 15 px */
+  --text-body--line-height: 1.5rem;
+  --tracking-label: 0.08em;
+  --tracking-wordmark: 0.22em;
+
+  /* ---- Forma y movimiento ---- */
+  --radius-ctl: 0.25rem;        /* 4 px en todo: botones, campos, tarjetas, paneles */
+  --radius-bar: 0.125rem;       /* 2 px: barras de progreso */
+  --container-page: 95rem;      /* 1520 px */
+  --default-transition-duration: 150ms;
+}
+
+:root {
+  --control-h: 2.75rem;  /* 44 px: dedo */
+  --topbar-h: 3.5rem;    /* 56 px */
+  color-scheme: dark;
+}
+@media (pointer: fine) {
+  :root { --control-h: 2.25rem; } /* 36 px: ratón (WCAG 2.2: mínimo 24 px) */
+}

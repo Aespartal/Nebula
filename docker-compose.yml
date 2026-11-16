@@ -1,0 +1,22 @@
+services:
+  nebula:
+    build: .
+    ports:
+      # Solo accesible desde este equipo; pon un proxy con HTTPS delante (ver deploy/Caddyfile)
+      - "127.0.0.1:3000:3000"
+    environment:
+      TRUST_PROXY: "1"
+      # TMDB_API_KEY: "tu_clave"
+      # Cuando las carpetas de contenido están en un disco de red, no llegan eventos: escaneo periódico
+      # SCAN_INTERVAL_MINUTES: "30"
+    volumes:
+      - nebula-data:/data
+      # Tus carpetas, en solo lectura. Después añádelas en Ajustes con la ruta de dentro (/media/...)
+      - /ruta/a/tus/peliculas:/media/peliculas:ro
+      - /ruta/a/tus/series:/media/series:ro
+    restart: unless-stopped
+    # GPU NVIDIA (necesita NVIDIA Container Toolkit; sin probar): descomenta
+    # environment: { NVIDIA_DRIVER_CAPABILITIES: "compute,video,utility" }
+    # deploy: { resources: { reservations: { devices: [{ driver: nvidia, count: 1, capabilities: [gpu] }] } } }
+volumes:
+  nebula-data:

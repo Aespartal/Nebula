@@ -3,12 +3,12 @@ export type LibraryType = "movies" | "series";
 export interface Library { id: number; name: string; type: LibraryType; rootPath: string }
 
 /** `progress` es la fracción vista (0–1) para la barra de la tarjeta; `watched` si está marcada como vista. */
-export interface MovieSummary { id: number; title: string; year: number | null; fileId: number; watched: boolean; progress: number }
-export interface SeriesSummary { id: number; title: string; seasons: number; episodes: number; watchedEpisodes: number }
+export interface MovieSummary { id: number; title: string; year: number | null; fileId: number; watched: boolean; progress: number; hasPoster: boolean }
+export interface SeriesSummary { id: number; title: string; seasons: number; episodes: number; watchedEpisodes: number; hasPoster: boolean }
 
-export interface EpisodeItem { id: number; number: number; title: string | null; fileId: number; watched: boolean; progress: number }
+export interface EpisodeItem { id: number; number: number; title: string | null; overview: string | null; fileId: number; watched: boolean; progress: number }
 export interface SeasonItem { id: number; number: number; episodes: EpisodeItem[] }
-export interface SeriesDetail { id: number; title: string; seasons: SeasonItem[] }
+export interface SeriesDetail { id: number; title: string; overview: string | null; hasPoster: boolean; seasons: SeasonItem[] }
 
 export interface MediaStreamInfo {
   idx: number;
@@ -24,6 +24,8 @@ export interface MediaStreamInfo {
   isDefault: boolean;
   isForced: boolean;
   isExternal: boolean;
+  /** Solo subtítulos: true si son de texto (se pueden mostrar); false si son de imagen (PGS, DVD). */
+  textual: boolean;
 }
 
 export interface NextEpisode { fileId: number; label: string }
@@ -42,6 +44,8 @@ export interface MediaFileInfo {
   durationS: number | null;
   bitrate: number | null;
   streams: MediaStreamInfo[];
+  /** Sinopsis (de TMDB, si está configurado). */
+  overview: string | null;
   /** Estado de visionado del usuario actual. */
   resume: WatchProgress;
 }
@@ -120,4 +124,18 @@ export interface ContinueItem {
   reason: "resume" | "next";
   positionS: number;
   durationS: number | null;
+  /** URL de la carátula (de la película o de la serie), si se conoce. */
+  poster: string | null;
+}
+
+// --- Metadatos (fase 5) ---
+
+export interface MetadataStatus {
+  /** Hay una clave de TMDB configurada en el servidor. */
+  enabled: boolean;
+  running: boolean;
+  movies: { total: number; withPoster: number; pending: number };
+  series: { total: number; withPoster: number; pending: number };
+  /** Último problema (p. ej. clave rechazada), en forma de código. */
+  lastError: "invalid_key" | "network" | null;
 }

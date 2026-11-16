@@ -24,7 +24,7 @@ export default function Home() {
               <li key={i.fileId}>
                 <TitleCard
                   to={`/ver/${i.fileId}`} title={i.title} kind={i.kind === "episode" ? "Episodio" : "Película"}
-                  progress={i.durationS ? i.positionS / i.durationS : 0}
+                  progress={i.durationS ? i.positionS / i.durationS : 0} poster={i.poster}
                   meta={[i.subtitle, i.reason === "next" ? "Siguiente" : `Retomar en ${formatClock(i.positionS)}`].filter(Boolean).join(" · ")}
                 />
               </li>

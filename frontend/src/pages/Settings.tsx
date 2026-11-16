@@ -2,6 +2,7 @@ import { useId, useState, type FormEvent } from "react";
 import type { Library, LibraryType, ScanStats } from "@nebula/shared";
 import { Button } from "../components/Button";
 import { AccountSection } from "../components/AccountSection";
+import { MetadataSection } from "../components/MetadataSection";
 import { PageHeading } from "../components/PageHeading";
 import { UsersSection } from "../components/UsersSection";
 import { useUser } from "../lib/auth";
@@ -142,6 +143,7 @@ export default function Settings() {
         <>
           <UsersSection />
           <LibrariesSection />
+          <MetadataSection />
         </>
       )}
     </>

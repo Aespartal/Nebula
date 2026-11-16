@@ -36,7 +36,7 @@ export default function Movies() {
             <ul className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {list.map((m) => (
                 <li key={m.id}>
-                  <TitleCard to={`/ver/${m.fileId}`} title={m.title} kind="Película" progress={m.progress} watched={m.watched}
+                  <TitleCard to={`/ver/${m.fileId}`} title={m.title} kind="Película" progress={m.progress} watched={m.watched} poster={m.hasPoster ? `/api/posters/movie/${m.id}` : null}
                     meta={[m.year ? String(m.year) : "Sin año", watchLabel(m.watched, m.progress)].filter(Boolean).join(" · ")} />
                 </li>
               ))}

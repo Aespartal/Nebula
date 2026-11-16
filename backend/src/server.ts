@@ -33,7 +33,7 @@ const app = Fastify({ logger: true, trustProxy: config.trustProxy });
 await registerAuth(app, db);
 registerAuthRoutes(app, db);
 const meta = new MetadataService(
-  db, config.tmdbKey ? new Tmdb({ apiKey: config.tmdbKey, language: config.tmdbLanguage }) : null,
+  db, config.tmdbKey ? new Tmdb({ apiKey: config.tmdbKey, language: config.tmdbLanguage, baseUrl: config.tmdbBaseUrl, imageBase: config.tmdbImageBase }) : null,
   path.join(config.dataDir, "posters"), (m) => app.log.info(m),
 );
 registerRoutes(app, db, () => meta.kick());

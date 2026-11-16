@@ -42,6 +42,22 @@ El navegador informa de lo que sabe reproducir y el servidor decide:
 **Diagnóstico:** `npm run doctor` comprueba FFmpeg, la tarjeta NVIDIA y prueba de verdad cada ruta de conversión.
 Limitación actual: no hay *remux* (copiar el vídeo sin recodificar cuando solo falla el audio o el contenedor); siempre se recodifica.
 
+## Subtítulos y audio
+
+- Subtítulos de texto (SRT, ASS/SSA, mov_text, WebVTT), incrustados o en archivos externos junto al vídeo, se convierten a WebVTT al vuelo y se guardan en caché. Los de imagen (PGS, DVD) no se pueden mostrar en el navegador y aparecen desactivados.
+- En el reproductor eliges subtítulo y pista de audio; Nebula recuerda tu idioma preferido en ese navegador.
+
+## Carátulas y sinopsis (TMDB)
+
+Opcional. Con una clave gratuita de [TMDB](https://www.themoviedb.org/settings/api), Nebula añade carátulas y sinopsis.
+
+- `TMDB_API_KEY`: clave de API (v3) o token de acceso de lectura (v4). En Windows (cmd): `set TMDB_API_KEY=tu_clave`.
+- `TMDB_LANGUAGE`: idioma de los datos, por defecto `es-ES`.
+- A TMDB solo se envían título y año. Las carátulas se descargan una vez y se sirven desde Nebula.
+- Estado y búsqueda manual: Ajustes → «Carátulas y sinopsis» (solo administradores).
+
+This product uses the TMDB API but is not endorsed or certified by TMDB.
+
 ## Estructura
 
 - `backend/`: Fastify + SQLite + ffprobe + FFmpeg. Escaneo incremental, catálogo, streaming con Range y conversión HLS.

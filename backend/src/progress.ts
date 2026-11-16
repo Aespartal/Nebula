@@ -48,6 +48,13 @@ export function setSeriesWatched(db: Db, userId: number, seriesId: number, watch
   return files.length;
 }
 
+/** Marca (o desmarca) todos los episodios de una temporada. Devuelve cuántos archivos se tocaron. */
+export function setSeasonWatched(db: Db, userId: number, seasonId: number, watched: boolean, now = Date.now()): number {
+  const files = db.prepare("SELECT MIN(f.id) AS id FROM media_files f JOIN episodes e ON e.id=f.episode_id WHERE e.season_id=? GROUP BY e.id").all(seasonId) as { id: number }[];
+  db.transaction(() => { for (const f of files) setWatched(db, userId, f.id, watched, now); })();
+  return files.length;
+}
+
 const LIMIT = 12;
 
 /** «Seguir viendo»: lo que está a medias y, de las series en curso, el siguiente episodio. */

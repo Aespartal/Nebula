@@ -16,6 +16,9 @@ export const config = {
   maxTranscodeSessions: Number(process.env.MAX_TRANSCODES ?? 3),
   // Carátulas y sinopsis (opcional). Clave v3 o «Token de acceso de lectura» v4 de themoviedb.org.
   tmdbKey: process.env.TMDB_API_KEY?.trim() || undefined,
+  // Solo para pruebas con un TMDB simulado.
+  tmdbBaseUrl: process.env.TMDB_BASE_URL,
+  tmdbImageBase: process.env.TMDB_IMAGE_BASE,
   tmdbLanguage: process.env.TMDB_LANGUAGE ?? "es-ES",
   probeConcurrency: Number(process.env.PROBE_CONCURRENCY ?? 4),
 };

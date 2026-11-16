@@ -41,7 +41,7 @@ export function useApi<T>(path: string | null) {
   return { ...state, reload };
 }
 
-export type ApiResult<T> = { ok: true; data: T } | { ok: false; code: string; status?: number; retryAfter?: number };
+export type ApiResult<T> = { ok: true; data: T } | { ok: false; code: string; status?: number; retryAfter?: number; body?: Record<string, unknown> };
 
 export async function sendJson<T = unknown>(method: "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<ApiResult<T>> {
   try {
@@ -53,7 +53,7 @@ export async function sendJson<T = unknown>(method: "POST" | "PUT" | "DELETE", p
     const json = await r.json().catch(() => ({}));
     // En el acceso, un 401 es «contraseña incorrecta», no «sesión caducada».
     if (r.status === 401 && !path.startsWith("/api/auth/")) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
-    if (!r.ok) return { ok: false, code: json?.error ?? `http_${r.status}`, status: r.status, retryAfter: json?.retryAfter };
+    if (!r.ok) return { ok: false, code: json?.error ?? `http_${r.status}`, status: r.status, retryAfter: json?.retryAfter, body: json };
     return { ok: true, data: json as T };
   } catch {
     return { ok: false, code: "network" };

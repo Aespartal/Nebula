@@ -30,3 +30,10 @@ export function watchLabel(watched: boolean, progress: number): string | null {
   if (progress >= 0.02) return `Vista al ${Math.round(progress * 100)} %`;
   return null;
 }
+
+/** 1 288 490 188 160 → "1,17 TB". Para discos: potencias de 1024, como el Explorador. */
+export function formatBytes(bytes: number): string {
+  if (bytes >= 1024 ** 4) return `${(bytes / 1024 ** 4).toFixed(2).replace(".", ",")} TB`;
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1).replace(".", ",")} GB`;
+  return `${Math.max(0, Math.round(bytes / 1024 ** 2))} MB`;
+}

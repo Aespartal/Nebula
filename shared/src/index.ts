@@ -139,3 +139,39 @@ export interface MetadataStatus {
   /** Último problema (p. ej. clave rechazada), en forma de código. */
   lastError: "invalid_key" | "network" | null;
 }
+
+// --- Sistema (solo administradores) ---
+
+export interface ConversionSession {
+  id: string;
+  fileId: number;
+  title: string;
+  /** Ruta de conversión de FFmpeg ("nvenc-gpu", "nvenc-cpu-decode", "x264") o null si no hay proceso. */
+  profile: string | null;
+  running: boolean;
+  failed: boolean;
+  /** Posición a la que ha llegado el reproductor, en segundos, y duración total. */
+  positionS: number;
+  durationS: number;
+  maxHeight: number;
+  idleS: number;
+  ageS: number;
+}
+export interface ConversionsInfo {
+  ffmpeg: string | null;
+  nvenc: boolean;
+  profiles: string[];
+  maxSessions: number;
+  sessions: ConversionSession[];
+}
+export interface StorageLibrary {
+  id: number;
+  name: string;
+  type: "movies" | "series";
+  rootPath: string;
+  files: number;
+  /** Lo que ocupan los vídeos de esta carpeta. */
+  sizeBytes: number;
+  /** Estado del disco donde está la carpeta; null si no se puede leer (carpeta no accesible). */
+  disk: { totalBytes: number; freeBytes: number } | null;
+}

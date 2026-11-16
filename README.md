@@ -43,6 +43,10 @@ El navegador informa de lo que sabe reproducir y el servidor decide:
 **Diagnóstico:** `npm run doctor` comprueba FFmpeg, la tarjeta NVIDIA y prueba de verdad cada ruta de conversión.
 Limitación actual: no hay *remux* (copiar el vídeo sin recodificar cuando solo falla el audio o el contenedor); siempre se recodifica.
 
+## Sistema (administradores)
+
+La pestaña **Sistema** muestra las conversiones de FFmpeg en curso (con qué ruta, GPU o CPU, y hasta dónde va cada una; se pueden detener) y el almacenamiento de cada carpeta: vídeo que ocupa, uso del disco y espacio libre.
+
 ## Subtítulos y audio
 
 - Subtítulos de texto (SRT, ASS/SSA, mov_text, WebVTT), incrustados o en archivos externos junto al vídeo, se convierten a WebVTT al vuelo y se guardan en caché. Los de imagen (PGS, DVD) no se pueden mostrar en el navegador y aparecen desactivados.

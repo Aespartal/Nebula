@@ -1,6 +1,9 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import fastifyStatic from "@fastify/static";
 import { config } from "./config.js";
 import { openDb, type Db } from "./db/index.js";
 import { registerRoutes } from "./routes.js";
@@ -18,6 +21,17 @@ bootstrapLibrary("Series", "series", config.seriesDir);
 const app = Fastify({ logger: true });
 await app.register(cors, { origin: true });
 registerRoutes(app, db);
+
+// Si existe el build del frontend (npm run build), se sirve desde el mismo puerto.
+const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../frontend/dist");
+if (existsSync(webRoot)) {
+  await app.register(fastifyStatic, { root: webRoot });
+  app.setNotFoundHandler((req, reply) =>
+    req.method === "GET" && !req.url.startsWith("/api/")
+      ? reply.sendFile("index.html")
+      : reply.code(404).send({ error: "not_found" }),
+  );
+}
 
 await app.listen({ port: config.port, host: config.host });
 

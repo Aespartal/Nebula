@@ -1,0 +1,78 @@
+@import "tailwindcss";
+@import "@fontsource-variable/fraunces/opsz.css";
+@import "@fontsource/atkinson-hyperlegible/400.css";
+@import "@fontsource/atkinson-hyperlegible/700.css";
+
+/*
+  Paleta "sala de cine": tonos cálidos, sin negro ni blanco puros.
+  Contrastes verificados (WCAG): texto >= 14:1, texto secundario >= 6.6:1,
+  acento >= 5.4:1 sobre el fondo, bordes de controles >= 3.6:1.
+*/
+:root {
+  --c-bg: #f6efe4;
+  --c-surface: #fffaf2;
+  --c-text: #231c16;
+  --c-muted: #5e5246;
+  --c-line: #8a7a6a;
+  --c-rule: color-mix(in srgb, #231c16 16%, transparent);
+  --c-accent: #b3330f;
+  --c-on-accent: #fffaf2;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --c-bg: #16120f;
+    --c-surface: #221c17;
+    --c-text: #f3ebe0;
+    --c-muted: #b9ab9a;
+    --c-line: #7a6c5e;
+    --c-rule: color-mix(in srgb, #f3ebe0 16%, transparent);
+    --c-accent: #ff8a5b;
+    --c-on-accent: #16120f;
+  }
+}
+
+@theme inline {
+  --font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
+  --font-sans: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --color-bg: var(--c-bg);
+  --color-surface: var(--c-surface);
+  --color-text: var(--c-text);
+  --color-muted: var(--c-muted);
+  --color-line: var(--c-line);
+  --color-rule: var(--c-rule);
+  --color-accent: var(--c-accent);
+  --color-on-accent: var(--c-on-accent);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--c-bg);
+    color: var(--c-text);
+    font-family: var(--font-sans);
+    font-size: 1.0625rem;
+    line-height: 1.55;
+  }
+  :focus-visible {
+    outline: 3px solid var(--c-accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+  summary {
+    cursor: pointer;
+  }
+  /* Cifras alineadas a la línea base: más legibles (Fraunces usa elzevirianas por defecto). */
+  .font-display {
+    font-variant-numeric: lining-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

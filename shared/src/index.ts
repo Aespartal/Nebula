@@ -25,8 +25,16 @@ export interface MediaStreamInfo {
   isExternal: boolean;
 }
 
+export interface NextEpisode { fileId: number; label: string }
+
 export interface MediaFileInfo {
   id: number;
+  kind: "movie" | "episode";
+  title: string;
+  /** Contexto corto bajo el título: "Breaking Bad · T1 E2" o el año de la película. */
+  subtitle: string | null;
+  seriesId: number | null;
+  next: NextEpisode | null;
   relPath: string;
   sizeBytes: number;
   container: string | null;

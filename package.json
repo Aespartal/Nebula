@@ -1,8 +1,10 @@
 {
   "name": "nebula",
   "private": true,
-  "workspaces": ["backend", "shared"],
+  "workspaces": ["backend", "frontend", "shared"],
   "scripts": {
-    "dev": "npm run dev -w backend"
+    "dev:backend": "npm run dev -w backend",
+    "dev:frontend": "npm run dev -w frontend",
+    "build": "npm run build -w frontend"
   }
 }

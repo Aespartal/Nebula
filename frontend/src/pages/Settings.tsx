@@ -15,6 +15,7 @@ const TYPE_LABEL: Record<LibraryType, string> = { movies: "Películas", series: 
 
 const ERRORS: Record<string, string> = {
   root_path_not_a_directory: "Esa carpeta no existe o Nebula no puede acceder a ella. Revisa la ruta.",
+  root_path_unsafe: "Esa ruta es una unidad entera o una carpeta del sistema. Elige la carpeta donde están tus vídeos.",
   library_already_exists: "Esa carpeta ya está añadida.",
   network: "No se pudo conectar con el servidor de Nebula.",
   scan_in_progress: "Ya se está buscando en esa carpeta. Espera un momento.",

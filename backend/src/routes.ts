@@ -7,6 +7,7 @@ import type {
 import type { Db } from "./db/index.js";
 import { requireAdmin } from "./auth/plugin.js";
 import { getStreams } from "./media-queries.js";
+import { unsafeLibraryRoot } from "./library-paths.js";
 import { getProgress } from "./progress.js";
 import { scanLibrary, type LibraryRow } from "./scanner.js";
 import { sendRanged } from "./stream.js";
@@ -48,6 +49,8 @@ export function registerRoutes(app: FastifyInstance, db: Db, onScanned: () => vo
       const root = path.resolve(req.body.rootPath);
       const s = await stat(root).catch(() => null);
       if (!s?.isDirectory()) return reply.code(400).send({ error: "root_path_not_a_directory" });
+      // Una unidad entera o una carpeta del sistema nunca es una biblioteca: el escaneo recorrería todo el disco.
+      if (unsafeLibraryRoot(root)) return reply.code(400).send({ error: "root_path_unsafe" });
       try {
         const info = db
           .prepare("INSERT INTO libraries(name,type,root_path) VALUES(?,?,?)")

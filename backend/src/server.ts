@@ -20,12 +20,17 @@ import { registerRoutes } from "./routes.js";
 import { scanLibrary, type LibraryRow } from "./scanner.js";
 import { registerSystemRoutes } from "./system-routes.js";
 import { registerSecurityHeaders } from "./security.js";
+import { unsafeLibraryRoot } from "./library-paths.js";
 import { LibraryWatcher } from "./watcher.js";
 
 const db: Db = openDb(path.join(config.dataDir, "nebula.db"));
 
 function bootstrapLibrary(name: string, type: "movies" | "series", root?: string) {
   if (!root) return;
+  if (unsafeLibraryRoot(root)) {
+    console.warn(`[config] «${root}» no es una carpeta válida para la biblioteca «${name}» (unidad entera o carpeta del sistema); se ignora.`);
+    return;
+  }
   db.prepare("INSERT OR IGNORE INTO libraries(name,type,root_path) VALUES(?,?,?)").run(name, type, root);
 }
 bootstrapLibrary("Películas", "movies", config.moviesDir);

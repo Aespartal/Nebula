@@ -2,17 +2,28 @@ import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import type { ScanStats } from "@nebula/shared";
 import { SUB_EXTS, VIDEO_EXTS, config } from "./config.js";
+import { isSkippedDir, unsafeLibraryRoot } from "./library-paths.js";
 import type { Db } from "./db/index.js";
 import { probe, type ProbeResult } from "./ffmpeg/probe.js";
 import { parseMedia, type Parsed } from "./parser.js";
 
 export interface LibraryRow { id: number; name: string; type: "movies" | "series"; root_path: string }
 
-async function* walk(dir: string): AsyncGenerator<string> {
-  for (const entry of await readdir(dir, { withFileTypes: true })) {
+/** Recorre la biblioteca. La carpeta raíz debe poder leerse; una subcarpeta ilegible se avisa y se salta. */
+async function* walk(dir: string, isRoot = true): AsyncGenerator<string> {
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch (e) {
+    if (isRoot) throw e;
+    console.warn(`[scan] no se puede leer «${dir}» (${(e as NodeJS.ErrnoException).code ?? (e as Error).message}); se omite`);
+    return;
+  }
+  for (const entry of entries) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) yield* walk(full);
-    else if (entry.isFile()) yield full;
+    if (entry.isDirectory()) {
+      if (!isSkippedDir(entry.name)) yield* walk(full, false);
+    } else if (entry.isFile()) yield full;
   }
 }
 
@@ -116,6 +127,9 @@ function cleanupOrphans(db: Db) {
 const scanning = new Set<number>();
 
 export async function scanLibrary(db: Db, lib: LibraryRow): Promise<ScanStats> {
+  if (unsafeLibraryRoot(lib.root_path)) {
+    throw Object.assign(new Error(`«${lib.root_path}» es una unidad entera o una carpeta del sistema; quita o corrige la biblioteca «${lib.name}»`), { statusCode: 400 });
+  }
   if (scanning.has(lib.id)) throw Object.assign(new Error("scan_in_progress"), { statusCode: 409 });
   scanning.add(lib.id);
   try {

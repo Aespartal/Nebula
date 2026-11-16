@@ -14,7 +14,7 @@ npm run dev:frontend
 
 Producción en un solo puerto: `npm run build` y arranca el backend; si existe `frontend/dist` lo sirve él mismo.
 
-También puedes añadir carpetas desde la propia app (Ajustes). Requisitos: Node 22+, `ffprobe` en el PATH (o `FFPROBE_PATH`).
+También puedes añadir carpetas desde la propia app (Ajustes). Una biblioteca debe ser la carpeta donde están tus vídeos: Nebula rechaza una unidad entera (`D:\`) o una carpeta del sistema, y al escanear se salta `node_modules`, la papelera y similares. Requisitos: Node 22+, `ffprobe` en el PATH (o `FFPROBE_PATH`).
 
 Variables: `PORT`, `HOST` (por defecto `127.0.0.1`; `0.0.0.0` para la red local), `DATA_DIR`, `MOVIES_DIR`, `SERIES_DIR`,
 `FFMPEG_PATH`, `FFPROBE_PATH`, `HLS_DIR` (temporales de conversión), `MAX_TRANSCODES` (sesiones simultáneas, 3 por defecto),

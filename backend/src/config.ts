@@ -14,6 +14,9 @@ export const config = {
   ffmpegPath: process.env.FFMPEG_PATH ?? "ffmpeg",
   hlsDir: path.resolve(process.env.HLS_DIR ?? path.join(process.env.DATA_DIR ?? "./data", "transcode")),
   maxTranscodeSessions: Number(process.env.MAX_TRANSCODES ?? 3),
+  // Carátulas y sinopsis (opcional). Clave v3 o «Token de acceso de lectura» v4 de themoviedb.org.
+  tmdbKey: process.env.TMDB_API_KEY?.trim() || undefined,
+  tmdbLanguage: process.env.TMDB_LANGUAGE ?? "es-ES",
   probeConcurrency: Number(process.env.PROBE_CONCURRENCY ?? 4),
 };
 

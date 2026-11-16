@@ -57,6 +57,7 @@ export function continueWatching(db: Db, userId: number): ContinueItem[] {
   const resume = db.prepare(`
     SELECT f.id AS fileId, wp.position_s AS positionS, wp.duration_s AS durationS, wp.updated_at AS ts,
            m.title AS movieTitle, m.year AS movieYear,
+           m.id AS movieId, m.poster_path AS moviePoster, s.id AS seriesId, s.poster_path AS seriesPoster,
            e.number AS en, e.title AS et, se.number AS sn, s.title AS seriesTitle
     FROM watch_progress wp
     JOIN media_files f ON f.id = wp.file_id
@@ -75,11 +76,12 @@ export function continueWatching(db: Db, userId: number): ContinueItem[] {
       title: ep ? (r.et ?? `Episodio ${r.en}`) : r.movieTitle,
       subtitle: ep ? `${r.seriesTitle} · T${r.sn} E${r.en}` : r.movieYear ? String(r.movieYear) : null,
       positionS: r.positionS, durationS: r.durationS,
+      poster: ep ? (r.seriesPoster ? `/api/posters/series/${r.seriesId}` : null) : (r.moviePoster ? `/api/posters/movie/${r.movieId}` : null),
     });
   }
 
   const last = db.prepare(`
-    SELECT s.id AS seriesId, s.title AS seriesTitle, se.number AS sn, e.number AS en, MAX(wp.updated_at) AS ts
+    SELECT s.id AS seriesId, s.title AS seriesTitle, s.poster_path AS seriesPoster, se.number AS sn, e.number AS en, MAX(wp.updated_at) AS ts
     FROM watch_progress wp
     JOIN media_files f ON f.id = wp.file_id
     JOIN episodes e ON e.id = f.episode_id
@@ -99,6 +101,7 @@ export function continueWatching(db: Db, userId: number): ContinueItem[] {
     out.push({
       fileId: n.fileId, kind: "episode", reason: "next", ts: l.ts,
       title: n.et ?? `Episodio ${n.en}`, subtitle: `${l.seriesTitle} · T${n.sn} E${n.en}`, positionS: 0, durationS: null,
+      poster: l.seriesPoster ? `/api/posters/series/${l.seriesId}` : null,
     });
   }
 

@@ -92,6 +92,11 @@ const migrations: string[] = [
   );
   CREATE INDEX idx_progress_recent ON watch_progress(user_id, updated_at DESC);
   `,
+  `
+  -- Metadatos (TMDB). poster_path es la ruta en TMDB; la imagen se descarga a data/posters la primera vez que se pide.
+  ALTER TABLE movies ADD COLUMN meta_checked_at INTEGER;
+  ALTER TABLE series ADD COLUMN meta_checked_at INTEGER;
+  `,
 ];
 
 export function migrate(db: Database.Database) {

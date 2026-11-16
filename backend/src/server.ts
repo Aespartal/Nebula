@@ -12,6 +12,9 @@ import { registerAuthRoutes } from "./auth/routes.js";
 import { SubtitleCache } from "./subtitles.js";
 import { registerSubtitleRoutes } from "./subtitles-routes.js";
 import { registerPlaybackRoutes } from "./playback-routes.js";
+import { MetadataService } from "./metadata/service.js";
+import { registerMetadataRoutes } from "./metadata/routes.js";
+import { Tmdb } from "./metadata/tmdb.js";
 import { registerProgressRoutes } from "./progress-routes.js";
 import { registerRoutes } from "./routes.js";
 import { scanLibrary, type LibraryRow } from "./scanner.js";
@@ -29,8 +32,13 @@ const app = Fastify({ logger: true, trustProxy: config.trustProxy });
 // Sin CORS: la web y la API comparten origen (en desarrollo, a través del proxy de Vite).
 await registerAuth(app, db);
 registerAuthRoutes(app, db);
-registerRoutes(app, db);
+const meta = new MetadataService(
+  db, config.tmdbKey ? new Tmdb({ apiKey: config.tmdbKey, language: config.tmdbLanguage }) : null,
+  path.join(config.dataDir, "posters"), (m) => app.log.info(m),
+);
+registerRoutes(app, db, () => meta.kick());
 registerProgressRoutes(app, db);
+registerMetadataRoutes(app, meta);
 
 const encoders = await detectEncoders(config.ffmpegPath);
 let hls: HlsSessions | null = null;
@@ -64,7 +72,7 @@ await app.listen({ port: config.port, host: config.host });
 // Escaneo inicial en segundo plano: no bloquea el arranque.
 for (const lib of db.prepare("SELECT * FROM libraries").all() as LibraryRow[]) {
   scanLibrary(db, lib)
-    .then((s) => app.log.info({ library: lib.name, ...s }, "escaneo inicial completado"))
+    .then((s) => { app.log.info({ library: lib.name, ...s }, "escaneo inicial completado"); meta.kick(); })
     .catch((e) => app.log.error({ library: lib.name, err: e.message }, "escaneo inicial falló"));
 }
 

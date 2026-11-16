@@ -13,9 +13,14 @@ import { sendRanged } from "./stream.js";
 
 const toLibrary = (r: LibraryRow): Library => ({ id: r.id, name: r.name, type: r.type, rootPath: r.root_path });
 
-export function registerRoutes(app: FastifyInstance, db: Db) {
+/** `onScanned` se llama tras cada escaneo (p. ej. para buscar carátulas de lo nuevo). */
+export function registerRoutes(app: FastifyInstance, db: Db, onScanned: () => void = () => {}) {
   const libs = () => db.prepare("SELECT * FROM libraries ORDER BY id").all() as LibraryRow[];
-  const scanOne = (lib: LibraryRow) => scanLibrary(db, lib);
+  const scanOne = async (lib: LibraryRow) => {
+    const stats = await scanLibrary(db, lib);
+    onScanned();
+    return stats;
+  };
 
   app.get("/api/health", async () => ({ ok: true }));
 
@@ -71,18 +76,18 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
   // --- Catálogo ---
   app.get("/api/movies", async (req): Promise<MovieSummary[]> => {
     const rows = db.prepare(`
-      SELECT x.id, x.title, x.year, x.fileId, COALESCE(wp.watched,0) AS watched,
+      SELECT x.id, x.title, x.year, x.fileId, x.hasPoster, COALESCE(wp.watched,0) AS watched,
              CASE WHEN wp.duration_s > 0 THEN MIN(1.0, wp.position_s / wp.duration_s) ELSE 0 END AS progress
-      FROM (SELECT m.id, m.title, m.year, MIN(f.id) AS fileId
+      FROM (SELECT m.id, m.title, m.year, m.poster_path IS NOT NULL AS hasPoster, MIN(f.id) AS fileId
             FROM movies m JOIN media_files f ON f.movie_id = m.id GROUP BY m.id) x
       LEFT JOIN watch_progress wp ON wp.file_id = x.fileId AND wp.user_id = ?
       ORDER BY x.title COLLATE NOCASE`).all(req.user!.id) as any[];
-    return rows.map((r) => ({ ...r, watched: !!r.watched }));
+    return rows.map((r) => ({ ...r, watched: !!r.watched, hasPoster: !!r.hasPoster }));
   });
 
   app.get("/api/series", async (req): Promise<SeriesSummary[]> =>
     db.prepare(`
-      SELECT s.id, s.title,
+      SELECT s.id, s.title, s.poster_path IS NOT NULL AS hasPoster,
              COUNT(DISTINCT se.id) AS seasons, COUNT(DISTINCT e.id) AS episodes,
              COUNT(DISTINCT CASE WHEN wp.watched = 1 THEN e.id END) AS watchedEpisodes
       FROM series s
@@ -90,17 +95,17 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
       JOIN episodes e ON e.season_id = se.id
       LEFT JOIN media_files f ON f.episode_id = e.id
       LEFT JOIN watch_progress wp ON wp.file_id = f.id AND wp.user_id = ?
-      GROUP BY s.id ORDER BY s.title COLLATE NOCASE`).all(req.user!.id) as SeriesSummary[],
+      GROUP BY s.id ORDER BY s.title COLLATE NOCASE`).all(req.user!.id).map((r: any) => ({ ...r, hasPoster: !!r.hasPoster })) as SeriesSummary[],
   );
 
   app.get<{ Params: { id: string } }>("/api/series/:id", async (req, reply): Promise<SeriesDetail | void> => {
-    const s = db.prepare("SELECT id,title FROM series WHERE id=?").get(Number(req.params.id)) as
-      | { id: number; title: string } | undefined;
+    const s = db.prepare("SELECT id,title,overview,poster_path IS NOT NULL AS hasPoster FROM series WHERE id=?").get(Number(req.params.id)) as
+      | { id: number; title: string; overview: string | null; hasPoster: number } | undefined;
     if (!s) return reply.code(404).send({ error: "not_found" });
     const rows = db.prepare(`
       SELECT x.*, COALESCE(wp.watched,0) AS watched,
              CASE WHEN wp.duration_s > 0 THEN MIN(1.0, wp.position_s / wp.duration_s) ELSE 0 END AS progress
-      FROM (SELECT se.id AS seasonId, se.number AS seasonNumber, e.id AS episodeId, e.number, e.title, MIN(f.id) AS fileId
+      FROM (SELECT se.id AS seasonId, se.number AS seasonNumber, e.id AS episodeId, e.number, e.title, e.overview, MIN(f.id) AS fileId
             FROM seasons se JOIN episodes e ON e.season_id = se.id JOIN media_files f ON f.episode_id = e.id
             WHERE se.series_id = ? GROUP BY e.id) x
       LEFT JOIN watch_progress wp ON wp.file_id = x.fileId AND wp.user_id = ?
@@ -108,9 +113,9 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
     const seasons = new Map<number, SeriesDetail["seasons"][number]>();
     for (const r of rows) {
       if (!seasons.has(r.seasonId)) seasons.set(r.seasonId, { id: r.seasonId, number: r.seasonNumber, episodes: [] });
-      seasons.get(r.seasonId)!.episodes.push({ id: r.episodeId, number: r.number, title: r.title, fileId: r.fileId, watched: !!r.watched, progress: r.progress });
+      seasons.get(r.seasonId)!.episodes.push({ id: r.episodeId, number: r.number, title: r.title, overview: r.overview, fileId: r.fileId, watched: !!r.watched, progress: r.progress });
     }
-    return { id: s.id, title: s.title, seasons: [...seasons.values()] };
+    return { id: s.id, title: s.title, overview: s.overview, hasPoster: !!s.hasPoster, seasons: [...seasons.values()] };
   });
 
   // --- Archivos ---

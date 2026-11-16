@@ -1,0 +1,8 @@
+{
+  "name": "nebula",
+  "private": true,
+  "workspaces": ["backend", "shared"],
+  "scripts": {
+    "dev": "npm run dev -w backend"
+  }
+}

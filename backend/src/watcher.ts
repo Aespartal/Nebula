@@ -2,6 +2,7 @@ import { watch, type FSWatcher } from "node:fs";
 import path from "node:path";
 import { SUB_EXTS, VIDEO_EXTS } from "./config.js";
 import type { Db } from "./db/index.js";
+import { unsafeLibraryRoot } from "./library-paths.js";
 import type { LibraryRow } from "./scanner.js";
 
 export interface WatcherOptions {
@@ -38,6 +39,10 @@ export class LibraryWatcher {
     }
     for (const lib of libs) {
       if (this.watchers.has(lib.id)) continue;
+      if (unsafeLibraryRoot(lib.root_path)) {
+        this.o.log(`no se vigila «${lib.name}»: «${lib.root_path}» es una unidad entera o una carpeta del sistema`);
+        continue;
+      }
       try {
         const w = watch(lib.root_path, { recursive: true, persistent: false }, (_ev, file) => {
           if (isRelevant(file ? String(file) : null)) this.schedule(lib.id);

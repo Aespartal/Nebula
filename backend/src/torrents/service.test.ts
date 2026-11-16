@@ -17,6 +17,7 @@ class Fake implements TorrentClient {
   async list() { this.lists++; if (this.down) throw new Error("ECONNREFUSED"); return this.torrents.map((t) => ({ ...t })); }
   async addMagnet() { return "x"; } async addFile() { return "x"; }
   async pause() {} async resume() {} async remove() {}
+  async ensureCategory() {} async freeSpaceBytes() { return null; }
 }
 
 function setup(opts: TorrentServiceOptions = {}) {

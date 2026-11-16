@@ -52,6 +52,10 @@ export interface TorrentClient {
   pause(hash: string): Promise<void>;
   resume(hash: string): Promise<void>;
   remove(hash: string, deleteFiles: boolean): Promise<void>;
+  /** Crea la categoría o corrige su carpeta final: al terminar, el cliente mueve ahí lo descargado. */
+  ensureCategory(name: string, savePath: string): Promise<void>;
+  /** Espacio libre del disco de descargas; null si el cliente no lo informa. */
+  freeSpaceBytes(): Promise<number | null>;
 }
 
 export type TorrentErrorCode = "invalid_magnet" | "invalid_torrent" | "rejected";

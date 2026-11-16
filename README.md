@@ -50,7 +50,7 @@ La pestaña **Sistema** muestra las conversiones de FFmpeg en curso (con qué ru
 ## Descargas (en preparación)
 
 Nebula controlará un qBittorrent instalado en el mismo equipo (plan en [`docs/plan-descargas.md`](docs/plan-descargas.md)).
-De momento solo está la comprobación de la conexión:
+Con `TORRENT_USER` y `TORRENT_PASS` en el `.env`, la API de administrador ya permite añadir (magnet o archivo `.torrent`, nunca una URL), pausar, reanudar y quitar descargas, con o sin sus archivos; la pantalla llega en el siguiente paso. Solo se gestionan las descargas que añade Nebula, no el resto de lo que tengas en qBittorrent. Nebula se niega a añadir si en el disco de descargas no queda margen libre (`TORRENT_MIN_FREE_GB`, 5 GB por defecto). Para configurar y comprobar la conexión:
 
 1. En qBittorrent: *Herramientas → Opciones → Interfaz web*, activa la interfaz, deja la dirección en `127.0.0.1` y pon usuario y contraseña.
 2. En `.env`: `TORRENT_URL` (por defecto `http://127.0.0.1:8080`), `TORRENT_USER` y `TORRENT_PASS`.

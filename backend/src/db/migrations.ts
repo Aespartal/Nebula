@@ -97,6 +97,18 @@ const migrations: string[] = [
   ALTER TABLE movies ADD COLUMN meta_checked_at INTEGER;
   ALTER TABLE series ADD COLUMN meta_checked_at INTEGER;
   `,
+  `
+  -- Descargas de torrents que Nebula ha añadido. El cliente no sabe quién pidió qué ni a qué biblioteca iba.
+  CREATE TABLE downloads (
+    hash TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('movies','series')),
+    added_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    added_at INTEGER NOT NULL,
+    completed_at INTEGER,
+    library_id INTEGER REFERENCES libraries(id) ON DELETE SET NULL
+  );
+  `,
 ];
 
 export function migrate(db: Database.Database) {

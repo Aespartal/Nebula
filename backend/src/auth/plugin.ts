@@ -41,7 +41,7 @@ export async function registerAuth(app: FastifyInstance, db: Db) {
       const site = req.headers["sec-fetch-site"];
       let bad = typeof site === "string" && site !== "same-origin" && site !== "none";
       if (origin && origin !== "null") {
-        try { bad ||= new URL(origin).host !== req.headers.host; } catch { bad = true; }
+        try { bad ||= new URL(origin).host !== req.host; } catch { bad = true; }
       } else if (origin === "null") bad = true;
       if (bad) return reply.code(403).send({ error: "bad_origin" });
     }

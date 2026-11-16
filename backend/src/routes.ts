@@ -14,7 +14,7 @@ import { sendRanged } from "./stream.js";
 const toLibrary = (r: LibraryRow): Library => ({ id: r.id, name: r.name, type: r.type, rootPath: r.root_path });
 
 /** `onScanned` se llama tras cada escaneo (p. ej. para buscar carátulas de lo nuevo). */
-export function registerRoutes(app: FastifyInstance, db: Db, onScanned: () => void = () => {}) {
+export function registerRoutes(app: FastifyInstance, db: Db, onScanned: () => void = () => {}, onLibraryAdded: () => void = () => {}) {
   const libs = () => db.prepare("SELECT * FROM libraries ORDER BY id").all() as LibraryRow[];
   const scanOne = async (lib: LibraryRow) => {
     const stats = await scanLibrary(db, lib);
@@ -52,6 +52,7 @@ export function registerRoutes(app: FastifyInstance, db: Db, onScanned: () => vo
         const info = db
           .prepare("INSERT INTO libraries(name,type,root_path) VALUES(?,?,?)")
           .run(req.body.name, req.body.type, root);
+        onLibraryAdded();
         return reply.code(201).send(
           toLibrary(db.prepare("SELECT * FROM libraries WHERE id=?").get(info.lastInsertRowid) as LibraryRow),
         );

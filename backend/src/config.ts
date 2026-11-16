@@ -2,9 +2,18 @@ import path from "node:path";
 
 export const config = {
   port: Number(process.env.PORT ?? 3000),
-  // Por defecto solo localhost. Para la red local: HOST=0.0.0.0 (ya hay cuentas, pero sin HTTPS aún: fase 6).
+  // Por defecto solo localhost. Para la red local: HOST=0.0.0.0 (sin HTTPS, la contraseña viaja en claro: ver README).
   host: process.env.HOST ?? "127.0.0.1",
   // Pon TRUST_PROXY=1 cuando haya un proxy inverso delante (fase 6) para que la IP y el protocolo sean los reales.
+  // HTTPS directo (opcional): rutas al certificado y a la clave privada en formato PEM.
+  // Alternativa recomendada para Internet: un proxy inverso con certificado automático (ver deploy/Caddyfile).
+  tlsCert: process.env.TLS_CERT || undefined,
+  tlsKey: process.env.TLS_KEY || undefined,
+  // Vigilancia de carpetas: escanea solo cuando se añaden, cambian o borran archivos. WATCH=0 la desactiva.
+  watch: process.env.WATCH !== "0",
+  watchDebounceMs: Number(process.env.WATCH_DEBOUNCE_MS ?? 10_000),
+  // Escaneo periódico de respaldo (útil con carpetas de red). 0 = desactivado.
+  scanIntervalMinutes: Number(process.env.SCAN_INTERVAL_MINUTES ?? 0),
   trustProxy: process.env.TRUST_PROXY === "1",
   dataDir: path.resolve(process.env.DATA_DIR ?? "./data"),
   ffprobePath: process.env.FFPROBE_PATH ?? "ffprobe",

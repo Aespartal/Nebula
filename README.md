@@ -83,7 +83,7 @@ Antes de exponerlo: contraseñas largas (mínimo 8, mejor una frase), solo las c
 
 ## Arrancar con el equipo
 
-- **Windows:** `deploy/windows/instalar-servicio.ps1` instala Nebula como servicio con [NSSM](https://nssm.cc) (arranca con Windows, rota el registro en `data/nebula.log`).
+- **Windows:** `deploy/windows/instalar-servicio.ps1` instala Nebula como servicio con [NSSM](https://nssm.cc) (arranca con Windows, rota el registro en `data/nebula.log`). Gestión día a día, actualizar y solución de problemas: [`docs/servicio-windows.md`](docs/servicio-windows.md).
   Una alternativa sin NSSM: Programador de tareas → «Al iniciar el sistema» → `npm start` en la carpeta del proyecto.
 - **Docker:** `docker-compose.yml` y `Dockerfile` (Node 22 + FFmpeg). Monta tus carpetas en solo lectura y añádelas en Ajustes con la ruta de dentro del contenedor.
   La GPU NVIDIA en Docker requiere NVIDIA Container Toolkit; en Windows, lo más fiable para NVENC es ejecutarlo directamente (sin Docker).

@@ -2,13 +2,15 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
-import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
 import { config } from "./config.js";
 import { openDb, type Db } from "./db/index.js";
 import { detectEncoders } from "./ffmpeg/encoders.js";
 import { HlsSessions } from "./ffmpeg/hls-sessions.js";
+import { registerAuth } from "./auth/plugin.js";
+import { registerAuthRoutes } from "./auth/routes.js";
 import { registerPlaybackRoutes } from "./playback-routes.js";
+import { registerProgressRoutes } from "./progress-routes.js";
 import { registerRoutes } from "./routes.js";
 import { scanLibrary, type LibraryRow } from "./scanner.js";
 
@@ -21,9 +23,12 @@ function bootstrapLibrary(name: string, type: "movies" | "series", root?: string
 bootstrapLibrary("Películas", "movies", config.moviesDir);
 bootstrapLibrary("Series", "series", config.seriesDir);
 
-const app = Fastify({ logger: true });
-await app.register(cors, { origin: true });
+const app = Fastify({ logger: true, trustProxy: config.trustProxy });
+// Sin CORS: la web y la API comparten origen (en desarrollo, a través del proxy de Vite).
+await registerAuth(app, db);
+registerAuthRoutes(app, db);
 registerRoutes(app, db);
+registerProgressRoutes(app, db);
 
 const encoders = await detectEncoders(config.ffmpegPath);
 let hls: HlsSessions | null = null;

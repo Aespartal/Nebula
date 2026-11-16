@@ -5,7 +5,7 @@ import { LinkButton } from "../components/Button";
 import { PageHeading } from "../components/PageHeading";
 import { SearchBox } from "../components/SearchBox";
 import { TitleCard } from "../components/TitleCard";
-import { norm, plural } from "../lib/format";
+import { norm, plural, watchLabel } from "../lib/format";
 import { usePageTitle } from "../lib/usePageTitle";
 import { useApi } from "../lib/useApi";
 
@@ -36,7 +36,8 @@ export default function Movies() {
             <ul className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {list.map((m) => (
                 <li key={m.id}>
-                  <TitleCard to={`/ver/${m.fileId}`} title={m.title} kind="Película" meta={m.year ? String(m.year) : "Sin año"} />
+                  <TitleCard to={`/ver/${m.fileId}`} title={m.title} kind="Película" progress={m.progress} watched={m.watched}
+                    meta={[m.year ? String(m.year) : "Sin año", watchLabel(m.watched, m.progress)].filter(Boolean).join(" · ")} />
                 </li>
               ))}
             </ul>

@@ -25,3 +25,18 @@ export function tintFor(key: string): string {
   h ^= h >>> 15; h = Math.imul(h, 2246822507); h ^= h >>> 13;
   return TINTS[(h >>> 0) % TINTS.length];
 }
+
+/** 3725 → "1:02:05"; 125 → "2:05". Para decir «retomando en…». */
+export function formatClock(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
+  return `${h > 0 ? `${h}:` : ""}${mm}:${String(sec).padStart(2, "0")}`;
+}
+
+/** Para mostrar junto al título: texto, no solo color ni icono. */
+export function watchLabel(watched: boolean, progress: number): string | null {
+  if (watched) return "Vista";
+  if (progress >= 0.02) return `Vista al ${Math.round(progress * 100)} %`;
+  return null;
+}

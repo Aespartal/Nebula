@@ -1,7 +1,10 @@
 import { useId, useState, type FormEvent } from "react";
 import type { Library, LibraryType, ScanStats } from "@nebula/shared";
 import { Button } from "../components/Button";
+import { AccountSection } from "../components/AccountSection";
 import { PageHeading } from "../components/PageHeading";
+import { UsersSection } from "../components/UsersSection";
+import { useUser } from "../lib/auth";
 import { ErrorBox, Loading } from "../components/States";
 import { plural } from "../lib/format";
 import { usePageTitle } from "../lib/usePageTitle";
@@ -27,8 +30,7 @@ function describeScan(all: ScanStats[]): string {
   return parts.length ? `Listo: ${parts.join(", ")}.` : "Todo estaba al día, no hay cambios.";
 }
 
-export default function Settings() {
-  usePageTitle("Ajustes");
+function LibrariesSection() {
   const libs = useApi<Library[]>("/api/libraries");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
@@ -64,9 +66,7 @@ export default function Settings() {
 
   return (
     <>
-      <PageHeading title="Ajustes" />
-
-      <section aria-labelledby="carpetas" className="max-w-2xl">
+      <section aria-labelledby="carpetas" className="mt-12 max-w-2xl">
         <h2 id="carpetas" className="font-display text-2xl font-semibold">Tus carpetas</h2>
         {libs.loading && <Loading />}
         {libs.error && <ErrorBox message={libs.error} onRetry={libs.reload} />}
@@ -127,6 +127,23 @@ export default function Settings() {
           </p>
         )}
       </div>
+    </>
+  );
+}
+
+export default function Settings() {
+  usePageTitle("Ajustes");
+  const user = useUser();
+  return (
+    <>
+      <PageHeading title="Ajustes" />
+      <AccountSection />
+      {user.role === "admin" && (
+        <>
+          <UsersSection />
+          <LibrariesSection />
+        </>
+      )}
     </>
   );
 }

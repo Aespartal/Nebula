@@ -7,15 +7,21 @@ export function describeHttpError(status: number): string {
   return `El servidor respondió con un error (código ${status}).`;
 }
 
-export function useApi<T>(path: string) {
-  const [state, setState] = useState<State<T>>({ data: null, error: null, loading: true });
+/** Las pantallas reaccionan a este aviso mostrando el acceso (la sesión caducó o se cerró en otro sitio). */
+export const UNAUTHORIZED_EVENT = "nebula:unauthorized";
+
+/** `path` null = no cargar nada (p. ej. secciones que solo ve un administrador). */
+export function useApi<T>(path: string | null) {
+  const [state, setState] = useState<State<T>>({ data: null, error: null, loading: path !== null });
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
+    if (path === null) { setState({ data: null, error: null, loading: false }); return; }
     const ctrl = new AbortController();
     setState((s) => ({ ...s, loading: true, error: null }));
     fetch(path, { signal: ctrl.signal })
       .then((r) => {
+        if (r.status === 401) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
         if (!r.ok) throw Object.assign(new Error("http"), { status: r.status });
         return r.json() as Promise<T>;
       })
@@ -35,17 +41,23 @@ export function useApi<T>(path: string) {
   return { ...state, reload };
 }
 
-export async function postJson<T>(path: string, body?: unknown): Promise<{ ok: true; data: T } | { ok: false; code: string }> {
+export type ApiResult<T> = { ok: true; data: T } | { ok: false; code: string; status?: number; retryAfter?: number };
+
+export async function sendJson<T = unknown>(method: "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<ApiResult<T>> {
   try {
     const r = await fetch(path, {
-      method: "POST",
-      headers: body ? { "content-type": "application/json" } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
+      method,
+      headers: body !== undefined ? { "content-type": "application/json" } : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
     });
     const json = await r.json().catch(() => ({}));
-    if (!r.ok) return { ok: false, code: json?.error ?? `http_${r.status}` };
+    // En el acceso, un 401 es «contraseña incorrecta», no «sesión caducada».
+    if (r.status === 401 && !path.startsWith("/api/auth/")) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+    if (!r.ok) return { ok: false, code: json?.error ?? `http_${r.status}`, status: r.status, retryAfter: json?.retryAfter };
     return { ok: true, data: json as T };
   } catch {
     return { ok: false, code: "network" };
   }
 }
+
+export const postJson = <T,>(path: string, body?: unknown) => sendJson<T>("POST", path, body);

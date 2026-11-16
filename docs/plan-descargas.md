@@ -120,10 +120,18 @@ El hito 0 va primero porque aclara las dudas de la API antes de construir encima
 | Exposición accidental del cliente | Documentar `127.0.0.1`; `status` avisa si detecta que el cliente escucha en otra interfaz |
 | Contenido y legalidad | La responsabilidad de lo que se descarga es del administrador; la documentación lo indica y recomienda un VPN si el tráfico lo requiere |
 
-## 7. Decisiones que necesito de ti
+## 7. Decisiones tomadas
 
-1. **Cliente:** ¿qBittorrent (recomendado) o ya usas Transmission? Empezaría por el que tengas.
-2. **Usuarios normales:** ¿solo el administrador gestiona las descargas, o quieres que otras cuentas puedan *pedir* una y tú aprobarla?
-3. **Borrado:** al quitar una descarga, ¿qué es lo normal: conservar el archivo y seguir sembrando, o borrar todo?
-4. **Siembra:** ¿hay que parar al terminar o seguir compartiendo (límite de ratio o de tiempo)?
-5. **Descarga de archivo al dispositivo:** ¿para todos los usuarios o solo administradores?
+| Tema | Decisión |
+| --- | --- |
+| Cliente | **qBittorrent**. Transmission queda como adaptador opcional (hito 5) |
+| Quién gestiona | Solo administradores. Las «solicitudes» de otras cuentas, como mejora futura |
+| Borrado | «Quitar» ofrece dos opciones: solo de la lista, o **borrar todo** (torrent y archivos), esta última con confirmación explícita |
+| Siembra | La configura qBittorrent, no Nebula. Recomendado: parar al llegar a ratio 1,0 o a 24 h, lo que ocurra primero, y **pausar** (no borrar). El vídeo sigue en la biblioteca |
+| Descargar archivo al dispositivo | Para todas las cuentas con sesión |
+
+### Consecuencias para el diseño
+
+- El borrado total (`DELETE /api/downloads/:hash?files=1`) debe cuidar que, si el vídeo ya está en la biblioteca, también desaparezca del catálogo en el siguiente escaneo; y que la interfaz avise de que dejará de compartirse.
+- La preparación del cliente (hito 0) debe **mostrar** la configuración de siembra recomendada y ofrecer aplicarla, sin imponerla.
+- `GET /api/files/:id/download` queda abierto a cualquier usuario con sesión, con el mismo control de acceso que el streaming.

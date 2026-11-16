@@ -5,8 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { config } from "./config.js";
-import { buildHlsArgs, type ProfileName } from "./ffmpeg/args.js";
+import { buildHlsArgs, segmentCount, type ProfileName } from "./ffmpeg/args.js";
 import { detectEncoders } from "./ffmpeg/encoders.js";
+import { probe as probeFile } from "./ffmpeg/probe.js";
 
 const run = promisify(execFile);
 const ok = (m: string) => console.log(`  ✔ ${m}`);
@@ -18,7 +19,7 @@ async function tryRun(bin: string, args: string[], cwd?: string) {
     await run(bin, args, { cwd, timeout: 60_000, windowsHide: true });
     return { ok: true as const, err: "" };
   } catch (e: any) {
-    return { ok: false as const, err: String(e?.stderr ?? e?.message ?? e).trim().split("\n").slice(-4).join("\n") };
+    return { ok: false as const, err: String(e?.stderr ?? e?.message ?? e).trim().split("\n").slice(-12).join("\n") };
   }
 }
 
@@ -68,6 +69,44 @@ try {
   }
 } finally {
   await rm(tmp, { recursive: true, force: true });
+}
+
+// Prueba con un archivo real: `npm run doctor -- "D:\\Pruebas\\video.mkv"`.
+// Comprueba el inicio, un salto a mitad y el último segmento (el más corto) de cada ruta.
+const file = process.argv[2];
+if (file) {
+  console.log(`\nPrueba con tu archivo: ${file}`);
+  const tmp2 = await mkdtemp(path.join(os.tmpdir(), "nebula-doctor2-"));
+  try {
+    const pr = await probeFile(file);
+    const v = pr.streams.find((s) => s.kind === "video");
+    const a = pr.streams.find((s) => s.kind === "audio");
+    if (!v || !pr.durationS) throw new Error("No se pudo leer el vídeo (¿ruta correcta?).");
+    const segDur = 6;
+    const total = segmentCount(pr.durationS, segDur);
+    info(`${v.codec} ${v.profile ?? ""} ${v.pixFmt ?? ""} ${v.width}x${v.height}, ${pr.durationS.toFixed(1)} s → ${total} segmentos (el último dura ${(pr.durationS - (total - 1) * segDur).toFixed(2)} s)`);
+    const points: [string, number][] = [["inicio", 0], ["salto a mitad", Math.floor(total / 2)], ["último segmento", total - 1]];
+    for (const p of ["nvenc-gpu", "nvenc-cpu-decode", "x264"] as ProfileName[]) {
+      if (p !== "x264" && !enc.nvenc) continue;
+      for (const [label, seg] of points) {
+        const dir = await mkdtemp(path.join(tmp2, "r-"));
+        const args = buildHlsArgs({
+          input: file, startSeg: seg, segCount: Math.min(2, total - seg), segDur, videoIdx: v.idx, audioIdx: a?.idx ?? null,
+          sourceWidth: v.width, sourceHeight: v.height, maxHeight: 1080, profile: p,
+        });
+        const t0 = Date.now();
+        const r = await tryRun(config.ffmpegPath, args, dir);
+        const made = (await readdir(dir)).some((f) => f.endsWith(".ts"));
+        const secs = ((Date.now() - t0) / 1000).toFixed(1);
+        if (r.ok && made) ok(`${p} · ${label} (${secs} s)`);
+        else { bad(`${p} · ${label}`); info(r.err.replace(/\n/g, "\n    ")); }
+      }
+    }
+  } catch (e: any) {
+    bad(String(e?.message ?? e));
+  } finally {
+    await rm(tmp2, { recursive: true, force: true });
+  }
 }
 
 console.log("\nResultado");

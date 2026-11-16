@@ -33,6 +33,8 @@ interface Run {
   startSeg: number;
   endSeg: number;
   profile: ProfileName;
+  /** Posición de `profile` en la lista de rutas. */
+  idx: number;
   killed: boolean;
   stderr: string;
 }
@@ -63,6 +65,9 @@ export class HlsSessions {
   private readonly firstSegmentTimeoutMs: number;
   private readonly sessions = new Map<string, Session>();
   private profileIdx = 0;
+  /** Rutas que ya han terminado alguna conversión completa en esta máquina. */
+  private readonly proven = new Set<ProfileName>();
+  private readonly softFails = new Map<ProfileName, number>();
   private sweeper: NodeJS.Timeout | null = null;
 
   constructor(private readonly o: HlsOptions) {
@@ -156,9 +161,9 @@ export class HlsSessions {
     return n - next <= 3; // si está lejos de lo producido, es más rápido saltar a n
   }
 
-  private start(s: Session, n: number) {
+  private start(s: Session, n: number, idx = this.profileIdx) {
     this.kill(s);
-    const profile = this.o.profiles[this.profileIdx];
+    const profile = this.o.profiles[idx];
     if (!profile) { s.failed = true; return; }
     const segCount = Math.min(this.window, s.total - n);
     const args = buildHlsArgs({
@@ -169,9 +174,9 @@ export class HlsSessions {
     });
     this.log(`ffmpeg [${profile}] sesión ${s.id.slice(0, 8)} segmentos ${n}-${n + segCount - 1}`);
     const proc = spawn(this.o.ffmpegPath, args, { cwd: s.dir, stdio: ["ignore", "ignore", "pipe"], windowsHide: true });
-    const run: Run = { proc, startSeg: n, endSeg: n + segCount, profile, killed: false, stderr: "" };
+    const run: Run = { proc, startSeg: n, endSeg: n + segCount, profile, idx, killed: false, stderr: "" };
     s.run = run;
-    proc.stderr!.on("data", (d) => { run.stderr = (run.stderr + d).slice(-2000); });
+    proc.stderr!.on("data", (d) => { run.stderr = (run.stderr + d).slice(-4000); });
 
     let done = false;
     const finish = async (code: number | null) => {
@@ -181,20 +186,37 @@ export class HlsSessions {
       if (run.killed || s.closed) return;
       if (code !== 0) {
         const produced = await exists(path.join(s.dir, segmentName(run.startSeg)));
-        this.log(`ffmpeg [${run.profile}] terminó con código ${code}: ${run.stderr.trim().split("\n").slice(-3).join(" | ")}`);
+        this.log(`ffmpeg [${run.profile}] terminó con código ${code} (segmentos ${run.startSeg}-${run.endSeg - 1}): ${run.stderr.trim().split("\n").slice(-8).join(" | ")}`);
         if (!produced) {
-          // Esta ruta no funciona en esta máquina: pasamos a la siguiente (y la recordamos).
-          if (this.o.profiles[this.profileIdx] === run.profile) this.profileIdx++;
-          if (this.profileIdx >= this.o.profiles.length) { s.failed = true; return; }
-          this.log(`probando ruta alternativa: ${this.o.profiles[this.profileIdx]}`);
-          this.start(s, run.startSeg);
+          this.demoteIfDeserved(run);
+          const next = run.idx + 1;
+          if (next >= this.o.profiles.length) { s.failed = true; return; }
+          this.log(`probando ruta alternativa para este tramo: ${this.o.profiles[next]}`);
+          this.start(s, run.startSeg, next);
         }
         return; // si falló a mitad, la siguiente petición reinicia
       }
+      this.proven.add(run.profile);
       void this.prefetch(s, s.lastRequested);
     };
     proc.on("error", (e) => { run.stderr += String(e); void finish(-1); });
     proc.on("exit", (code) => void finish(code));
+  }
+
+  /**
+   * Una ruta que nunca ha funcionado se descarta de inmediato. Una que ya convirtió bien
+   * (p. ej. falla solo al final del vídeo o tras un salto) solo se descarta tras varios fallos,
+   * para que un tramo problemático no deje a toda la máquina en la ruta lenta.
+   */
+  private demoteIfDeserved(run: Run) {
+    if (this.profileIdx !== run.idx) return;
+    if (!this.proven.has(run.profile)) { this.profileIdx++; return; }
+    const n = (this.softFails.get(run.profile) ?? 0) + 1;
+    this.softFails.set(run.profile, n);
+    if (n >= 3) {
+      this.profileIdx++;
+      this.log(`la ruta ${run.profile} ha fallado ${n} veces: se deja de usar`);
+    }
   }
 
   private kill(s: Session) {

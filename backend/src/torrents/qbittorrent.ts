@@ -196,6 +196,20 @@ export class QBittorrent implements TorrentClient {
   async resume(hash: string): Promise<void> {
     await this.call("POST", (await this.apiAtLeast(2, 11)) ? "torrents/start" : "torrents/resume", { hashes: this.assertHash(hash) });
   }
+  async ensureCategory(name: string, savePath: string): Promise<void> {
+    const have = (await this.categories())[name];
+    if (!have) { await this.createCategory(name, savePath); return; }
+    // qBittorrent guarda las rutas con «/»; se comparan sin distinguir el separador ni el final.
+    const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+    if (norm(have.savePath ?? "") !== norm(savePath)) await this.call("POST", "torrents/editCategory", { category: name, savePath });
+  }
+
+  async freeSpaceBytes(): Promise<number | null> {
+    const data = (await (await this.call("GET", "sync/maindata?rid=0")).json()) as { server_state?: { free_space_on_disk?: number } };
+    const n = data.server_state?.free_space_on_disk;
+    return typeof n === "number" && n >= 0 ? n : null;
+  }
+
   async remove(hash: string, deleteFiles: boolean): Promise<void> {
     await this.call("POST", "torrents/delete", { hashes: this.assertHash(hash), deleteFiles: deleteFiles ? "true" : "false" });
   }

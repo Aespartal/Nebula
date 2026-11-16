@@ -24,6 +24,7 @@ function fields(contentType: string, body: Buffer): Record<string, string> {
 async function start(version: "v4" | "v5") {
   const calls: { path: string; form: Record<string, string> }[] = [];
   const torrents = new Map<string, any>();
+  const categories = new Map<string, { name: string; savePath: string }>();
   let port = 0;
   const cookie = () => (version === "v5" ? `QBT_SID_${port}` : "SID");
   const server = http.createServer((req, res) => {
@@ -42,6 +43,9 @@ async function start(version: "v4" | "v5") {
       const gone = () => { res.statusCode = 404; res.end("Not Found"); };
       if (path === "app/version") return res.end(version === "v5" ? "v5.0.2" : "v4.6.5");
       if (path === "app/webapiVersion") return res.end(version === "v5" ? "2.11.2" : "2.9.3");
+      if (path === "torrents/categories") { res.setHeader("content-type", "application/json"); return res.end(JSON.stringify(Object.fromEntries(categories))); }
+      if (path === "torrents/createCategory" || path === "torrents/editCategory") { categories.set(form.category, { name: form.category, savePath: form.savePath.replace(/\\/g, "/") }); return res.end(); }
+      if (path.startsWith("sync/maindata")) { res.setHeader("content-type", "application/json"); return res.end(JSON.stringify({ server_state: { free_space_on_disk: 123456789 } })); }
       if (path === "torrents/info") { res.setHeader("content-type", "application/json"); return res.end(JSON.stringify([...torrents.values()])); }
       if (path === "torrents/add") {
         const hash = HASH;
@@ -61,7 +65,7 @@ async function start(version: "v4" | "v5") {
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   port = (server.address() as AddressInfo).port;
-  return { server, calls, torrents, url: `http://127.0.0.1:${port}` };
+  return { server, calls, torrents, categories, url: `http://127.0.0.1:${port}` };
 }
 
 for (const version of ["v4", "v5"] as const) {
@@ -141,4 +145,29 @@ test("estados de qBittorrent → estados de Nebula, y datos de torrent normaliza
   for (const [from, to] of Object.entries(cases)) assert.equal(mapState(from), to, from);
   const t = toTorrentInfo({ hash: HASH.toUpperCase(), name: "x", state: "stalledUP", progress: 1, size: 10, dlspeed: 0, eta: 8640000, category: "c", save_path: "p", completion_on: 1700000000 });
   assert.deepEqual([t.hash, t.done, t.etaS, t.completedAt, t.downloadedBytes], [HASH, true, null, 1700000000000, 10]);
+});
+
+test("ensureCategory: crea la categoría, no toca la que ya está bien y corrige la que apunta a otra carpeta", async () => {
+  const { server, url, calls, categories } = await start("v5");
+  try {
+    const qb = new QBittorrent({ url, username: "a", password: "b" });
+    await qb.ensureCategory("nebula-peliculas", "D:\\Peliculas");
+    assert.equal(categories.get("nebula-peliculas")!.savePath, "D:/Peliculas");
+    assert.ok(calls.some((c) => c.path === "torrents/createCategory"));
+
+    calls.length = 0;
+    await qb.ensureCategory("nebula-peliculas", "d:\\peliculas\\"); // mismo sitio con otro separador, mayúsculas y barra final
+    assert.ok(!calls.some((c) => c.path.endsWith("Category")), "no se vuelve a escribir");
+
+    await qb.ensureCategory("nebula-peliculas", "E:\\Otra");
+    assert.equal(categories.get("nebula-peliculas")!.savePath, "E:/Otra");
+    assert.ok(calls.some((c) => c.path === "torrents/editCategory"));
+  } finally { server.close(); }
+});
+
+test("freeSpaceBytes: espacio libre del disco de descargas", async () => {
+  const { server, url } = await start("v5");
+  try {
+    assert.equal(await new QBittorrent({ url, username: "a", password: "b" }).freeSpaceBytes(), 123456789);
+  } finally { server.close(); }
 });

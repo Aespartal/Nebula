@@ -18,7 +18,10 @@ import { Tmdb } from "./metadata/tmdb.js";
 import { registerProgressRoutes } from "./progress-routes.js";
 import { registerRoutes } from "./routes.js";
 import { scanLibrary, type LibraryRow } from "./scanner.js";
+import { completionHandlers, registerDownloadRoutes } from "./downloads-routes.js";
 import { registerSystemRoutes } from "./system-routes.js";
+import { QBittorrent } from "./torrents/qbittorrent.js";
+import { TorrentService } from "./torrents/service.js";
 import { registerSecurityHeaders } from "./security.js";
 import { unsafeLibraryRoot } from "./library-paths.js";
 import { LibraryWatcher } from "./watcher.js";
@@ -72,6 +75,25 @@ if (encoders.profiles.length > 0) {
 registerPlaybackRoutes(app, db, hls, encoders, config.maxTranscodeSessions);
 registerSystemRoutes(app, db, hls, encoders, config.maxTranscodeSessions);
 registerSubtitleRoutes(app, db, new SubtitleCache(path.join(config.dataDir, "subtitles"), config.ffmpegPath));
+
+// Descargas: Nebula controla un qBittorrent local. Sin TORRENT_USER/TORRENT_PASS la API responde «no configurado».
+// Escaneo de una biblioteca (o de todas) tras terminar o borrar una descarga: lo gestiona el vigilante si está activo.
+const rescan = (libraryId: number | null) => {
+  const libs = (db.prepare("SELECT * FROM libraries").all() as LibraryRow[]).filter((l) => libraryId === null || l.id === libraryId);
+  for (const lib of libs) {
+    if (watcher) watcher.schedule(lib.id, 1000);
+    else scanLibrary(db, lib).then(() => meta.kick()).catch((e) => app.log.warn(`escaneo tras descarga de «${lib.name}» falló: ${e.message}`));
+  }
+};
+const torrentClient = config.torrent ? new QBittorrent(config.torrent) : null;
+const torrentService = torrentClient
+  ? new TorrentService(torrentClient, { ...completionHandlers(db, rescan), log: (m) => app.log.warn(m) })
+  : null;
+registerDownloadRoutes(app, db, { client: torrentClient, service: torrentService, minFreeBytes: config.torrentMinFreeBytes, rescan });
+if (torrentService) {
+  torrentService.start();
+  app.addHook("onClose", async () => { torrentService.stop(); });
+}
 
 // Si existe el build del frontend (npm run build), se sirve desde el mismo puerto.
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../frontend/dist");

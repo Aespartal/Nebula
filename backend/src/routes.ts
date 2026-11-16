@@ -2,7 +2,7 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import type {
-  Library, MediaFileInfo, MovieSummary, ScanStats, SeriesDetail, SeriesSummary,
+  Library, MediaFileInfo, MovieSummary, NextEpisode, ScanStats, SeriesDetail, SeriesSummary,
 } from "@nebula/shared";
 import type { Db } from "./db/index.js";
 import { scanLibrary, type LibraryRow } from "./scanner.js";
@@ -99,17 +99,53 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
 
   // --- Archivos ---
   app.get<{ Params: { id: string } }>("/api/files/:id", async (req, reply): Promise<MediaFileInfo | void> => {
-    const f = db.prepare(
-      "SELECT id, rel_path AS relPath, size_bytes AS sizeBytes, container, duration_s AS durationS, bitrate FROM media_files WHERE id=?",
-    ).get(Number(req.params.id)) as Omit<MediaFileInfo, "streams"> | undefined;
+    const f = db.prepare(`
+      SELECT f.id, f.rel_path AS relPath, f.size_bytes AS sizeBytes, f.container,
+             f.duration_s AS durationS, f.bitrate,
+             m.title AS movieTitle, m.year AS movieYear,
+             e.number AS epNumber, e.title AS epTitle,
+             se.number AS seasonNumber, s.id AS seriesId, s.title AS seriesTitle
+      FROM media_files f
+      LEFT JOIN movies m ON m.id = f.movie_id
+      LEFT JOIN episodes e ON e.id = f.episode_id
+      LEFT JOIN seasons se ON se.id = e.season_id
+      LEFT JOIN series s ON s.id = se.series_id
+      WHERE f.id = ?`).get(Number(req.params.id)) as any;
     if (!f) return reply.code(404).send({ error: "not_found" });
+
+    const isEpisode = f.epNumber !== null;
+    let next: NextEpisode | null = null;
+    if (isEpisode) {
+      const n = db.prepare(`
+        SELECT se2.number AS sn, e2.number AS en, e2.title, MIN(f2.id) AS fileId
+        FROM episodes e2
+        JOIN seasons se2 ON se2.id = e2.season_id
+        JOIN media_files f2 ON f2.episode_id = e2.id
+        WHERE se2.series_id = ? AND (se2.number > ? OR (se2.number = ? AND e2.number > ?))
+        GROUP BY e2.id ORDER BY se2.number, e2.number LIMIT 1`)
+        .get(f.seriesId, f.seasonNumber, f.seasonNumber, f.epNumber) as any;
+      if (n) next = { fileId: n.fileId, label: `T${n.sn} E${n.en}${n.title ? ` · ${n.title}` : ""}` };
+    }
+
     const streams = (db.prepare(`
       SELECT idx, kind, codec, profile, pix_fmt AS pixFmt, width, height, channels, language, title,
              is_default AS isDefault, is_forced AS isForced, is_external AS isExternal
       FROM media_streams WHERE file_id=? ORDER BY idx`).all(f.id) as any[]).map((s) => ({
       ...s, isDefault: !!s.isDefault, isForced: !!s.isForced, isExternal: !!s.isExternal,
     }));
-    return { ...f, streams };
+
+    return {
+      id: f.id,
+      kind: isEpisode ? "episode" : "movie",
+      title: isEpisode ? (f.epTitle ?? `Episodio ${f.epNumber}`) : f.movieTitle,
+      subtitle: isEpisode
+        ? `${f.seriesTitle} · T${f.seasonNumber} E${f.epNumber}`
+        : f.movieYear ? String(f.movieYear) : null,
+      seriesId: f.seriesId ?? null,
+      next,
+      relPath: f.relPath, sizeBytes: f.sizeBytes, container: f.container,
+      durationS: f.durationS, bitrate: f.bitrate, streams,
+    };
   });
 
   // Solo por id de BD (nunca por ruta del cliente). El tamaño se lee del disco en cada petición.

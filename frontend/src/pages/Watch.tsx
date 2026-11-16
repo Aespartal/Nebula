@@ -1,11 +1,12 @@
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { MediaFileInfo } from "@nebula/shared";
+import type { MediaFileInfo, MediaStreamInfo, PlaybackDecision } from "@nebula/shared";
 import { Button, LinkButton } from "../components/Button";
 import { Icon } from "../components/Icon";
 import { Wordmark } from "../components/Layout";
 import { ErrorBox, Loading } from "../components/States";
-import { formatDuration, formatSize } from "../lib/format";
+import { VideoPlayer, describeReason } from "../components/VideoPlayer";
+import { formatDuration, formatSize, plural } from "../lib/format";
 import { useFocusWhen } from "../lib/useFocusWhen";
 import { usePageTitle } from "../lib/usePageTitle";
 import { useApi } from "../lib/useApi";
@@ -16,27 +17,13 @@ export default function Watch() {
   return <WatchView key={id} id={id!} />;
 }
 
-function describeVideo(info: MediaFileInfo) {
-  const v = info.streams.find((s) => s.kind === "video");
-  return `contenedor ${info.container?.split(",")[0] ?? "desconocido"}, vídeo ${v?.codec ?? "desconocido"}`;
-}
-
-function playbackMessage(code: number | undefined, info: MediaFileInfo): string | null {
-  switch (code) {
-    case 1: return null; // abortado por el propio usuario
-    case 2: return "Se perdió la conexión con el servidor mientras se reproducía.";
-    case 3:
-    case 4:
-      return `Este navegador no puede reproducir el archivo tal cual (${describeVideo(info)}). ` +
-        "La conversión automática llegará en una próxima versión de Nebula. Mientras tanto, prueba con otro navegador.";
-    default: return "No se pudo reproducir el vídeo.";
-  }
-}
-
 function WatchView({ id }: { id: string }) {
   const { data: info, error, loading, reload } = useApi<MediaFileInfo>(`/api/files/${id}`);
   usePageTitle(info?.title);
-  const [playError, setPlayError] = useState<string | null>(null);
+  const [decision, setDecision] = useState<PlaybackDecision | null>(null);
+  const [forceTranscode, setForceTranscode] = useState(false);
+  const [fellBack, setFellBack] = useState(false);
+  const [audioIdx, setAudioIdx] = useState<number | undefined>(undefined);
   const nextRef = useRef<HTMLAnchorElement>(null);
   const h1 = useRef<HTMLHeadingElement>(null);
   useFocusWhen(h1, !!info);
@@ -58,23 +45,13 @@ function WatchView({ id }: { id: string }) {
         {error && <ErrorBox message={error} onRetry={reload} />}
         {info && (
           <>
-            <video
-              key={playError ? "retry" : "ok"}
-              controls autoPlay playsInline preload="metadata"
-              src={`/api/stream/${info.id}`}
-              className="aspect-video w-full bg-black"
-              onError={(e) => setPlayError(playbackMessage(e.currentTarget.error?.code, info))}
+            <VideoPlayer
+              fileId={info.id} audioIdx={audioIdx}
+              forceTranscode={forceTranscode} setForceTranscode={setForceTranscode}
+              onDecision={setDecision}
+              onDirectFailed={() => setFellBack(true)}
               onEnded={() => nextRef.current?.focus()}
-            >
-              Tu navegador no admite vídeo HTML5.
-            </video>
-
-            {playError && (
-              <div role="alert" className="mt-4 border-2 border-accent p-4">
-                <p>{playError}</p>
-                <Button variant="secondary" className="mt-3" onClick={() => setPlayError(null)}>Intentarlo de nuevo</Button>
-              </div>
-            )}
+            />
 
             <div className="mt-5">
               {info.subtitle && <p className="font-bold text-muted">{info.subtitle}</p>}
@@ -87,13 +64,64 @@ function WatchView({ id }: { id: string }) {
               </LinkButton>
             )}
 
+            <AudioPicker streams={info.streams} value={audioIdx} onChange={setAudioIdx} />
+
             <details className="mt-8 border-t border-rule pt-3">
               <summary className="min-h-12 py-2 font-bold">Detalles técnicos</summary>
+              <PlaybackStatus decision={decision} forced={forceTranscode} fellBack={fellBack}
+                setForced={(v) => { setFellBack(false); setForceTranscode(v); }} />
               <TechDetails info={info} />
             </details>
           </>
         )}
       </main>
+    </div>
+  );
+}
+
+function languageName(code: string | null): string {
+  if (!code) return "Sin idioma";
+  try { return new Intl.DisplayNames(["es"], { type: "language" }).of(code) ?? code; } catch { return code; }
+}
+
+function AudioPicker({ streams, value, onChange }: { streams: MediaStreamInfo[]; value?: number; onChange: (v: number | undefined) => void }) {
+  const audio = streams.filter((s) => s.kind === "audio");
+  const id = useId();
+  if (audio.length < 2) return null;
+  const current = value ?? (audio.find((s) => s.isDefault) ?? audio[0]).idx;
+  const label = (s: MediaStreamInfo) =>
+    [languageName(s.language), s.codec?.toUpperCase(), s.channels ? plural(s.channels, "canal", "canales") : null].filter(Boolean).join(" · ");
+  return (
+    <div className="mt-6 max-w-sm">
+      <label htmlFor={id} className="mb-1 block font-bold">Audio</label>
+      <select id={id} value={current} onChange={(e) => onChange(Number(e.target.value))}
+        className="min-h-12 w-full rounded-md border-2 border-line bg-surface px-3 py-2 text-text">
+        {audio.map((s) => <option key={s.idx} value={s.idx}>{label(s)}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function PlaybackStatus({ decision, forced, fellBack, setForced }: { decision: PlaybackDecision | null; forced: boolean; fellBack: boolean; setForced: (v: boolean) => void }) {
+  if (!decision) return null;
+  const direct = decision.mode === "direct";
+  return (
+    <div className="mt-2 max-w-2xl border-b border-rule pb-4">
+      <p className="font-bold">{direct ? "Reproducción directa" : `Convertido en el servidor (${decision.encoder === "nvenc" ? "GPU NVIDIA" : "CPU"})`}</p>
+      {direct ? (
+        <p className="text-muted">El archivo se envía tal cual, sin convertir.</p>
+      ) : (
+        <ul className="mt-1 list-disc pl-5 text-muted">
+          {decision.reasons.map((r) => (
+            <li key={r.code}>
+              {r.code === "forced" && fellBack ? "El navegador no pudo reproducir el archivo en directo" : describeReason(r)}
+            </li>
+          ))}
+        </ul>
+      )}
+      <Button variant="secondary" className="mt-3" onClick={() => setForced(!forced)}>
+        {forced ? "Probar reproducción directa" : "Forzar conversión"}
+      </Button>
     </div>
   );
 }
@@ -115,7 +143,7 @@ function TechDetails({ info }: { info: MediaFileInfo }) {
       {row("Tamaño", formatSize(info.sizeBytes))}
       {row("Contenedor", info.container ?? "—")}
       {video.map((v, i) => row(i === 0 ? "Vídeo" : "", `${v.codec ?? "?"}${v.width ? ` · ${v.width}×${v.height}` : ""}${v.pixFmt ? ` · ${v.pixFmt}` : ""}`))}
-      {audio.map((a, i) => row(i === 0 ? "Audio" : "", `${a.codec ?? "?"}${a.channels ? ` · ${a.channels} canales` : ""}${a.language ? ` · ${a.language}` : ""}`))}
+      {audio.map((a, i) => row(i === 0 ? "Audio" : "", `${a.codec ?? "?"}${a.channels ? ` · ${plural(a.channels, "canal", "canales")}` : ""}${a.language ? ` · ${a.language}` : ""}`))}
       {subs.length > 0 && row("Subtítulos", subs.map((s) => `${s.language ?? "sin idioma"}${s.isExternal ? " (archivo)" : ""}`).join(", "))}
     </dl>
   );

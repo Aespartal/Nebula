@@ -1,4 +1,6 @@
-/** Cliente mínimo de la API web v2 de qBittorrent (hito 0: conexión, lectura y categorías). */
+/** Cliente de la API web v2 de qBittorrent: conexión, lectura, categorías y control de descargas. */
+import { TorrentError, type AddOptions, type CheckError, type TorrentClient, type TorrentInfo, type TorrentState } from "./client.js";
+import { magnetHash, torrentHash } from "./torrent-meta.js";
 
 export type QbErrorCode = "unreachable" | "auth" | "banned" | "http";
 export class QbError extends Error {
@@ -17,9 +19,48 @@ export interface QbOptions {
 export interface QbTorrent {
   hash: string; name: string; state: string; progress: number; size: number;
   dlspeed: number; eta: number; category: string; save_path: string;
+  upspeed?: number; downloaded?: number; added_on?: number; completion_on?: number;
 }
 
-export class QBittorrent {
+/** Estados internos de qBittorrent → estados de Nebula. */
+export function mapState(s: string): TorrentState {
+  switch (s) {
+    case "error": case "missingFiles": return "error";
+    case "moving": return "moving";
+    case "allocating": case "checkingDL": case "checkingUP": case "checkingResumeData": return "checking";
+    case "pausedDL": case "stoppedDL": case "pausedUP": case "stoppedUP": return "paused";
+    case "queuedDL": case "queuedUP": return "queued";
+    case "stalledDL": return "stalled";
+    case "downloading": case "forcedDL": case "metaDL": case "forcedMetaDL": return "downloading";
+    case "uploading": case "forcedUP": case "stalledUP": return "seeding";
+    default: return "unknown";
+  }
+}
+
+const NO_ETA = 8_640_000; // qBittorrent usa 100 días como «infinito»
+
+export function toTorrentInfo(t: QbTorrent): TorrentInfo {
+  const progress = Math.max(0, Math.min(1, Number(t.progress) || 0));
+  const completedAt = t.completion_on && t.completion_on > 0 ? t.completion_on * 1000 : null;
+  return {
+    hash: String(t.hash).toLowerCase(),
+    name: t.name,
+    state: mapState(t.state),
+    progress,
+    done: progress >= 1,
+    sizeBytes: t.size ?? 0,
+    downloadedBytes: t.downloaded ?? Math.round((t.size ?? 0) * progress),
+    speedDown: t.dlspeed ?? 0,
+    speedUp: t.upspeed ?? 0,
+    etaS: t.eta === undefined || t.eta < 0 || t.eta >= NO_ETA ? null : t.eta,
+    category: t.category ?? "",
+    savePath: t.save_path ?? "",
+    addedAt: t.added_on && t.added_on > 0 ? t.added_on * 1000 : null,
+    completedAt,
+  };
+}
+
+export class QBittorrent implements TorrentClient {
   /** Cookie de sesión tal cual la manda qBittorrent: «SID=…» (4.x) o «QBT_SID_<puerto>=…» (5.x). */
   private sid: string | null = null;
   /** true si qBittorrent no pide sesión (p. ej. «omitir autenticación para clientes en localhost»). */
@@ -32,14 +73,15 @@ export class QBittorrent {
     this.f = o.fetch ?? fetch;
   }
 
-  private async raw(method: "GET" | "POST", path: string, form?: Record<string, string>): Promise<Response> {
+  private async raw(method: "GET" | "POST", path: string, form?: Record<string, string> | FormData): Promise<Response> {
     const headers: Record<string, string> = {
       // qBittorrent rechaza peticiones cuyo Origin/Referer no coincida con su propio host (protección CSRF).
       Referer: this.base, Origin: new URL(this.base).origin,
     };
     if (this.sid) headers.Cookie = this.sid;
-    let body: string | undefined;
-    if (form) { body = new URLSearchParams(form).toString(); headers["Content-Type"] = "application/x-www-form-urlencoded"; }
+    let body: string | FormData | undefined;
+    if (form instanceof FormData) body = form; // el Content-Type con su «boundary» lo pone fetch
+    else if (form) { body = new URLSearchParams(form).toString(); headers["Content-Type"] = "application/x-www-form-urlencoded"; }
     try {
       return await this.f(`${this.base}/api/v2/${path}`, { method, headers, body, signal: AbortSignal.timeout(this.o.timeoutMs ?? 8000) });
     } catch (e) {
@@ -69,7 +111,7 @@ export class QBittorrent {
   }
 
   /** Petición autenticada: si la sesión ha caducado (403), inicia sesión otra vez y reintenta una vez. */
-  private async call(method: "GET" | "POST", path: string, form?: Record<string, string>): Promise<Response> {
+  private async call(method: "GET" | "POST", path: string, form?: Record<string, string> | FormData): Promise<Response> {
     if (!this.sid && !this.open) await this.login();
     let r = await this.raw(method, path, form);
     if ((r.status === 403 || r.status === 401) && !this.open) { await this.login(); r = await this.raw(method, path, form); }
@@ -81,7 +123,80 @@ export class QBittorrent {
   async webApiVersion(): Promise<string> { return (await (await this.call("GET", "app/webapiVersion")).text()).trim(); }
   async preferences(): Promise<Record<string, unknown>> { return (await this.call("GET", "app/preferences")).json() as Promise<Record<string, unknown>>; }
   async categories(): Promise<Record<string, { name: string; savePath: string }>> { return (await this.call("GET", "torrents/categories")).json() as Promise<Record<string, { name: string; savePath: string }>>; }
-  async list(): Promise<QbTorrent[]> { return (await this.call("GET", "torrents/info")).json() as Promise<QbTorrent[]>; }
   async createCategory(name: string, savePath: string): Promise<void> { await this.call("POST", "torrents/createCategory", { category: name, savePath }); }
   async removeCategories(names: string[]): Promise<void> { await this.call("POST", "torrents/removeCategories", { categories: names.join("\n") }); }
+
+  // --- Contrato TorrentClient ---
+
+  async check(): Promise<{ ok: boolean; version?: string; error?: CheckError; message?: string }> {
+    try {
+      const [version, api] = await Promise.all([this.version(), this.webApiVersion()]);
+      return { ok: true, version: `${version} (API ${api})` };
+    } catch (e) {
+      if (e instanceof QbError) {
+        const error: CheckError = e.code === "unreachable" ? "unreachable" : e.code === "http" ? "unsupported" : "auth";
+        return { ok: false, error, message: e.message };
+      }
+      throw e;
+    }
+  }
+
+  /** qBittorrent 5.0 (API 2.11) renombró pausar/reanudar a parar/iniciar. */
+  private apiVersionCache?: [number, number];
+  private async apiAtLeast(major: number, minor: number): Promise<boolean> {
+    if (!this.apiVersionCache) {
+      const m = /^(\d+)\.(\d+)/.exec(await this.webApiVersion());
+      this.apiVersionCache = m ? [Number(m[1]), Number(m[2])] : [2, 0];
+    }
+    const [a, b] = this.apiVersionCache;
+    return a > major || (a === major && b >= minor);
+  }
+
+  async list(): Promise<TorrentInfo[]> {
+    return (await this.listRaw()).map(toTorrentInfo);
+  }
+  private async listRaw(): Promise<QbTorrent[]> { return (await this.call("GET", "torrents/info")).json() as Promise<QbTorrent[]>; }
+
+  private addForm(opts: AddOptions | undefined, fd: FormData) {
+    if (opts?.category) fd.set("category", opts.category);
+    if (opts?.paused) { fd.set("paused", "true"); fd.set("stopped", "true"); } // 4.x y 5.x lo llaman distinto
+    return fd;
+  }
+
+  private async add(fd: FormData): Promise<void> {
+    const r = await this.call("POST", "torrents/add", fd);
+    const text = (await r.text()).trim();
+    if (text === "Fails.") throw new TorrentError("rejected", "qBittorrent no aceptó el torrent (¿ya estaba añadido o es inválido?)");
+  }
+
+  async addMagnet(uri: string, opts?: AddOptions): Promise<string> {
+    const hash = magnetHash(uri);
+    const fd = this.addForm(opts, new FormData());
+    fd.set("urls", uri.trim());
+    await this.add(fd);
+    return hash;
+  }
+
+  async addFile(data: Buffer, opts?: AddOptions): Promise<string> {
+    const hash = torrentHash(data);
+    const fd = this.addForm(opts, new FormData());
+    fd.set("torrents", new Blob([new Uint8Array(data)], { type: "application/x-bittorrent" }), "nebula.torrent");
+    await this.add(fd);
+    return hash;
+  }
+
+  private assertHash(hash: string): string {
+    if (!/^[0-9a-f]{40}$/i.test(hash)) throw new TorrentError("rejected", "Hash de torrent no válido");
+    return hash.toLowerCase();
+  }
+
+  async pause(hash: string): Promise<void> {
+    await this.call("POST", (await this.apiAtLeast(2, 11)) ? "torrents/stop" : "torrents/pause", { hashes: this.assertHash(hash) });
+  }
+  async resume(hash: string): Promise<void> {
+    await this.call("POST", (await this.apiAtLeast(2, 11)) ? "torrents/start" : "torrents/resume", { hashes: this.assertHash(hash) });
+  }
+  async remove(hash: string, deleteFiles: boolean): Promise<void> {
+    await this.call("POST", "torrents/delete", { hashes: this.assertHash(hash), deleteFiles: deleteFiles ? "true" : "false" });
+  }
 }

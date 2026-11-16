@@ -5,6 +5,7 @@ import type {
   Library, MediaFileInfo, MovieSummary, NextEpisode, ScanStats, SeriesDetail, SeriesSummary,
 } from "@nebula/shared";
 import type { Db } from "./db/index.js";
+import { getStreams } from "./media-queries.js";
 import { scanLibrary, type LibraryRow } from "./scanner.js";
 import { sendRanged } from "./stream.js";
 
@@ -127,12 +128,7 @@ export function registerRoutes(app: FastifyInstance, db: Db) {
       if (n) next = { fileId: n.fileId, label: `T${n.sn} E${n.en}${n.title ? ` · ${n.title}` : ""}` };
     }
 
-    const streams = (db.prepare(`
-      SELECT idx, kind, codec, profile, pix_fmt AS pixFmt, width, height, channels, language, title,
-             is_default AS isDefault, is_forced AS isForced, is_external AS isExternal
-      FROM media_streams WHERE file_id=? ORDER BY idx`).all(f.id) as any[]).map((s) => ({
-      ...s, isDefault: !!s.isDefault, isForced: !!s.isForced, isExternal: !!s.isExternal,
-    }));
+    const streams = getStreams(db, f.id);
 
     return {
       id: f.id,

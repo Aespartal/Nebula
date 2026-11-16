@@ -44,3 +44,51 @@ export interface MediaFileInfo {
 }
 
 export interface ScanStats { added: number; updated: number; unchanged: number; removed: number; skipped: number; failed: number }
+
+// --- Reproducción (fase 3) ---
+
+export interface ClientCapabilities {
+  video: Partial<Record<"h264" | "hevc" | "vp9" | "av1", boolean>>;
+  audio: Partial<Record<"aac" | "mp3" | "opus" | "vorbis" | "flac" | "ac3" | "eac3", boolean>>;
+  containers: Partial<Record<"mp4" | "webm" | "mkv", boolean>>;
+  /** "native": el navegador reproduce HLS solo (Safari); "mse": con hls.js; "none": sin HLS. */
+  hls: "native" | "mse" | "none";
+  /** Límites opcionales del cliente. */
+  maxBitrate?: number;
+  maxHeight?: number;
+}
+
+export type DecisionReasonCode =
+  | "container"
+  | "video_codec"
+  | "video_profile"
+  | "audio_codec"
+  | "audio_track"
+  | "bitrate"
+  | "forced";
+
+export interface DecisionReason { code: DecisionReasonCode; detail?: string }
+
+export interface PlaybackRequest {
+  capabilities: ClientCapabilities;
+  audioStreamIdx?: number;
+  forceTranscode?: boolean;
+}
+
+export interface PlaybackDecision {
+  mode: "direct" | "transcode";
+  url: string;
+  sessionId?: string;
+  reasons: DecisionReason[];
+  /** Codificador que usará el servidor al convertir. */
+  encoder?: "nvenc" | "x264";
+  durationS: number | null;
+}
+
+export interface SystemInfo {
+  ffmpeg: string | null;
+  nvenc: boolean;
+  profiles: string[];
+  maxSessions: number;
+  activeSessions: number;
+}

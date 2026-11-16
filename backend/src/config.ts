@@ -9,6 +9,9 @@ export const config = {
   // Bootstrap opcional de bibliotecas al arrancar
   moviesDir: process.env.MOVIES_DIR ? path.resolve(process.env.MOVIES_DIR) : undefined,
   seriesDir: process.env.SERIES_DIR ? path.resolve(process.env.SERIES_DIR) : undefined,
+  ffmpegPath: process.env.FFMPEG_PATH ?? "ffmpeg",
+  hlsDir: path.resolve(process.env.HLS_DIR ?? path.join(process.env.DATA_DIR ?? "./data", "transcode")),
+  maxTranscodeSessions: Number(process.env.MAX_TRANSCODES ?? 3),
   probeConcurrency: Number(process.env.PROBE_CONCURRENCY ?? 4),
 };
 

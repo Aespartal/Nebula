@@ -9,7 +9,9 @@ const ITEMS: { to: string; label: string; icon: IconName; end?: boolean }[] = [
   { to: "/series", label: "Series", icon: "tv" },
   { to: "/ajustes", label: "Ajustes", icon: "sliders" },
 ];
+const DOWNLOADS: (typeof ITEMS)[number] = { to: "/descargas", label: "Descargas", icon: "download" };
 const SYSTEM: (typeof ITEMS)[number] = { to: "/sistema", label: "Sistema", icon: "cpu" };
+const COLS: Record<number, string> = { 4: "grid-cols-4", 5: "grid-cols-5", 6: "grid-cols-6" };
 
 export function Wordmark() {
   return (
@@ -32,7 +34,7 @@ export function Layout() {
     document.querySelector<HTMLElement>("main h1")?.focus({ preventScroll: true });
   }, [pathname]);
 
-  const items = user?.role === "admin" ? [...ITEMS, SYSTEM] : ITEMS;
+  const items = user?.role === "admin" ? [...ITEMS, DOWNLOADS, SYSTEM] : ITEMS;
   const initials = (user?.username ?? "").slice(0, 2).toUpperCase();
 
   return (
@@ -80,7 +82,7 @@ export function Layout() {
 
       <nav aria-label="Principal"
         className="fixed inset-x-0 bottom-0 z-20 border-t border-rule bg-bg pb-[env(safe-area-inset-bottom)] md:hidden">
-        <ul className={`grid ${items.length === 5 ? "grid-cols-5" : "grid-cols-4"}`}>
+        <ul className={`grid ${COLS[items.length]}`}>
           {items.map((i) => (
             <li key={i.to}>
               <NavLink to={i.to} end={i.end}

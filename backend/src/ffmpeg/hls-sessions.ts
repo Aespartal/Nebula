@@ -49,6 +49,7 @@ export interface Session {
   closed: boolean;
   lastAccess: number;
   lastRequested: number;
+  startedAt: number;
 }
 
 const PREFETCH = 6; // segmentos por delante de la reproducción que se mantienen listos
@@ -89,6 +90,17 @@ export class HlsSessions {
 
   get activeCount() { return this.sessions.size; }
 
+  /** Estado de las sesiones activas, para la página de sistema. */
+  snapshot() {
+    const now = Date.now();
+    return [...this.sessions.values()].map((s) => ({
+      id: s.id, fileId: s.params.fileId, durationS: s.params.durationS, maxHeight: s.params.maxHeight,
+      profile: s.run?.profile ?? null, running: !!s.run && !s.run.killed, failed: s.failed,
+      segmentsTotal: s.total, positionS: Math.round(s.lastRequested * this.segDur),
+      idleS: Math.round((now - s.lastAccess) / 1000), ageS: Math.round((now - s.startedAt) / 1000),
+    }));
+  }
+
   /** Perfil de conversión en uso ("nvenc" o "x264"). */
   get encoder(): "nvenc" | "x264" {
     return this.o.profiles[this.profileIdx]?.startsWith("nvenc") ? "nvenc" : "x264";
@@ -111,7 +123,7 @@ export class HlsSessions {
     await mkdir(dir, { recursive: true });
     const s: Session = {
       id, params, dir, total: segmentCount(params.durationS, this.segDur),
-      run: null, failed: false, closed: false, lastAccess: Date.now(), lastRequested: 0,
+      run: null, failed: false, closed: false, lastAccess: Date.now(), lastRequested: 0, startedAt: Date.now(),
     };
     this.sessions.set(id, s);
     return s;

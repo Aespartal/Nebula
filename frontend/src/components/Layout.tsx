@@ -9,6 +9,7 @@ const ITEMS: { to: string; label: string; icon: IconName; end?: boolean }[] = [
   { to: "/series", label: "Series", icon: "tv" },
   { to: "/ajustes", label: "Ajustes", icon: "sliders" },
 ];
+const SYSTEM: (typeof ITEMS)[number] = { to: "/sistema", label: "Sistema", icon: "cpu" };
 
 export function Wordmark() {
   return (
@@ -31,6 +32,7 @@ export function Layout() {
     document.querySelector<HTMLElement>("main h1")?.focus({ preventScroll: true });
   }, [pathname]);
 
+  const items = user?.role === "admin" ? [...ITEMS, SYSTEM] : ITEMS;
   const initials = (user?.username ?? "").slice(0, 2).toUpperCase();
 
   return (
@@ -46,7 +48,7 @@ export function Layout() {
             <Wordmark />
             <nav aria-label="Principal" className="hidden md:block">
               <ul className="flex items-center gap-1">
-                {ITEMS.map((i) => (
+                {items.map((i) => (
                   <li key={i.to}>
                     <NavLink to={i.to} end={i.end}
                       className={({ isActive }) =>
@@ -78,8 +80,8 @@ export function Layout() {
 
       <nav aria-label="Principal"
         className="fixed inset-x-0 bottom-0 z-20 border-t border-rule bg-bg pb-[env(safe-area-inset-bottom)] md:hidden">
-        <ul className="grid grid-cols-4">
-          {ITEMS.map((i) => (
+        <ul className={`grid ${items.length === 5 ? "grid-cols-5" : "grid-cols-4"}`}>
+          {items.map((i) => (
             <li key={i.to}>
               <NavLink to={i.to} end={i.end}
                 className={({ isActive }) =>

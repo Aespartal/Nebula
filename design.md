@@ -86,6 +86,11 @@ Atkinson solo tiene pesos 400 y 700: la jerarquía se hace con tamaño, color y 
 
 Un tema claro sería un segundo bloque de tokens (`@media (prefers-color-scheme: light)` o un atributo `data-theme`) con los mismos nombres; ningún componente tendría que cambiar. Hoy la app es solo oscura, como la referencia.
 
-## Lo que no está en el diseño de referencia
+## Qué hay de la referencia y qué no
 
-El archivo de referencia es una maqueta con datos inventados. Estas partes **no existen** en Nebula y por eso no están en la interfaz: pestañas de cola FFmpeg y almacenamiento, estado del nodo («VAL-SRV-01 · ONLINE»), fondo panorámico del hero, panel MediaInfo con pistas y códecs en las tarjetas. Los tokens están listos para cuando existan.
+El archivo de referencia es una maqueta con datos inventados. Lo que tiene equivalente real está implementado:
+
+- **Cola FFmpeg** → «Sistema · Conversión de vídeo»: conversiones en curso con su ruta (GPU/CPU), posición y botón «Detener».
+- **Almacenamiento** → «Sistema · Almacenamiento»: por carpeta, uso del disco, espacio libre y tamaño de los vídeos.
+
+Lo que **no existe** en Nebula y por eso no está: estado del nodo («VAL-SRV-01 · ONLINE»), fondo panorámico del hero, y el panel MediaInfo con pistas y códecs en las tarjetas.

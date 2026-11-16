@@ -7,6 +7,7 @@ import Movies from "./pages/Movies";
 import Series from "./pages/Series";
 import SeriesDetail from "./pages/SeriesDetail";
 import Settings from "./pages/Settings";
+import System from "./pages/System";
 import Watch from "./pages/Watch";
 import { usePageTitle } from "./lib/usePageTitle";
 
@@ -30,6 +31,7 @@ export function App() {
         <Route path="series" element={<Series />} />
         <Route path="series/:id" element={<SeriesDetail />} />
         <Route path="ajustes" element={<Settings />} />
+        <Route path="sistema" element={<System />} />
         <Route path="*" element={<NotFound />} />
       </Route>
       <Route path="ver/:id" element={<Watch />} />

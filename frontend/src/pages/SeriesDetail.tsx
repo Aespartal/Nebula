@@ -43,7 +43,7 @@ export default function SeriesDetail() {
 
   return (
     <>
-      <Link to="/series" className="mb-4 inline-flex min-h-12 items-center gap-1 font-bold text-muted hover:text-text">
+      <Link to="/series" className="mb-4 inline-flex min-h-[var(--control-h)] items-center gap-1 font-bold text-muted hover:text-text">
         <Icon name="back" className="size-5" /> Todas las series
       </Link>
       {loading && !data && <Loading />}
@@ -56,7 +56,7 @@ export default function SeriesDetail() {
                 className="aspect-[2/3] w-28 shrink-0 self-start object-cover sm:w-40" />
             )}
             <div className="min-w-0">
-              <h1 ref={h1} tabIndex={-1} className="font-display text-4xl font-semibold leading-none tracking-tight outline-none md:text-5xl [overflow-wrap:anywhere]">
+              <h1 ref={h1} tabIndex={-1} className="text-3xl font-bold leading-[1.08] tracking-tight outline-none md:text-5xl [overflow-wrap:anywhere]">
                 {data.title}
               </h1>
               <p className="mt-2 text-muted">
@@ -86,7 +86,7 @@ export default function SeriesDetail() {
               return (
                 <details key={season.id} open={i === 0} className="group border-t border-rule last:border-b">
                   <summary className="flex min-h-16 list-none items-center justify-between gap-3 py-3 [&::-webkit-details-marker]:hidden">
-                    <span className="font-display text-2xl font-semibold">Temporada {season.number}</span>
+                    <span className="text-lg font-bold tracking-tight">Temporada {season.number}</span>
                     <span className="flex items-center gap-2 text-muted">
                       {plural(season.episodes.length, "episodio", "episodios")}
                       {seen > 0 && ` · ${plural(seen, "visto", "vistos")}`}
@@ -96,8 +96,8 @@ export default function SeriesDetail() {
                   <ol className="pb-2">
                     {season.episodes.map((ep) => (
                       <li key={ep.id}>
-                        <Link to={`/ver/${ep.fileId}`} className="flex min-h-16 items-center gap-4 border-t border-rule py-3 hover:bg-surface">
-                          <span className="w-10 shrink-0 self-start pt-0.5 text-right font-display text-2xl font-semibold tabular-nums text-muted">
+                        <Link to={`/ver/${ep.fileId}`} className="group/ep flex min-h-16 items-center gap-4 border-t border-rule py-3 hover:bg-surface">
+                          <span className="w-10 shrink-0 self-start pt-0.5 text-right font-mono text-meta font-bold text-faint">
                             <span className="sr-only">Episodio </span>{ep.number}
                           </span>
                           <span className="min-w-0 flex-1">
@@ -109,7 +109,7 @@ export default function SeriesDetail() {
                               <span className="inline-flex items-center gap-1"><Icon name="check" className="size-4" /> Visto</span>
                             ) : ep.progress > 0.02 ? `${Math.round(ep.progress * 100)} %` : null}
                           </span>
-                          <Icon name="play" className="size-5 shrink-0 text-accent" />
+                          <Icon name="play" className="size-4 shrink-0 text-faint group-hover/ep:text-text" />
                         </Link>
                       </li>
                     ))}

@@ -1,68 +1,62 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { tintFor } from "../lib/format";
 import { Icon } from "./Icon";
 
 interface Props {
-  to: string; title: string; kind: "Película" | "Serie" | "Episodio"; meta: string;
-  /** Fracción vista (0–1): barra al pie del cartel. */
+  to: string; title: string; kind: "Película" | "Serie" | "Episodio";
+  /** Dato principal bajo el título (año, «T1 E2»…). */
+  meta: string;
+  /** Dato secundario a la derecha, en mono (duración, «Retomar en 12:30»…). */
+  aside?: string | null;
+  /** Fracción vista (0–1): barra de 2 px al pie del cartel. */
   progress?: number;
   watched?: boolean;
   /** Carátula (URL de Nebula). Sin ella, o si no carga, se usa el cartel tipográfico. */
   poster?: string | null;
 }
 
-/** Cartel con carátula si la hay; si no, un cartel tipográfico con tono propio por título. */
-export function TitleCard({ to, title, kind, meta, progress = 0, watched = false, poster }: Props) {
+/** Cartel 2:3 con borde fino. Con carátula, y con ratón, al pasar por encima aparece el botón de reproducir. */
+export function TitleCard({ to, title, kind, meta, aside, progress = 0, watched = false, poster }: Props) {
   const [failed, setFailed] = useState(false);
   const withPoster = !!poster && !failed;
   const showBar = !watched && progress > 0.02;
 
-  const overlays = (
-    <>
-      {watched && (
-        <span className="absolute right-3 top-3 inline-flex items-center gap-1 bg-[#f6efe4] px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-[#231c16]">
-          <Icon name="check" className="size-3.5" /> Vista
-        </span>
-      )}
-      {showBar && (
-        <span aria-hidden="true" className={`absolute inset-x-0 bottom-0 ${withPoster ? "bg-black/70 px-3 py-2" : "mx-4 mb-3"}`}>
-          <span className="block h-1.5 bg-[#f6efe4]/35">
-            <span className="block h-full bg-[#f6efe4]" style={{ width: `${Math.min(100, Math.round(progress * 100))}%` }} />
-          </span>
-        </span>
-      )}
-    </>
-  );
-
-  if (withPoster) {
-    return (
-      <Link to={to} className="group block">
-        <div className="relative aspect-[2/3] overflow-hidden bg-surface motion-safe:transition-transform motion-safe:group-hover:-translate-y-1">
-          <img src={poster!} alt="" loading="lazy" decoding="async" onError={() => setFailed(true)} className="size-full object-cover" />
-          {overlays}
-        </div>
-        <p className="mt-2 line-clamp-2 font-display text-lg font-semibold leading-tight">{title}</p>
-        <p className="text-muted group-hover:text-text">{meta}</p>
-      </Link>
-    );
-  }
-
   return (
     <Link to={to} className="group block">
-      <div
-        style={{ background: tintFor(title) }}
-        className="relative flex aspect-[2/3] flex-col justify-between p-4 text-[#f6efe4]
-                   motion-safe:transition-transform motion-safe:group-hover:-translate-y-1"
-      >
-        <span aria-hidden="true" className="pointer-events-none absolute inset-2 border border-[#f6efe4]/40" />
-        <span className="relative text-xs font-bold uppercase tracking-[0.16em]">{kind}</span>
-        <span className={`relative line-clamp-5 font-display text-[clamp(1.25rem,5.5vw,1.75rem)] font-semibold leading-[1.05] [overflow-wrap:anywhere] ${showBar ? "mb-4" : ""}`}>
-          {title}
+      <div className="relative aspect-[2/3] overflow-hidden rounded-ctl border border-rule bg-surface transition-colors group-hover:border-rule-strong group-focus-visible:border-muted">
+        {withPoster ? (
+          <img src={poster!} alt="" loading="lazy" decoding="async" onError={() => setFailed(true)} className="size-full object-cover" />
+        ) : (
+          <div className="flex size-full flex-col justify-between p-3">
+            <span className="label">{kind}</span>
+            <span className="line-clamp-5 text-[clamp(1rem,4.6vw,1.375rem)] font-bold leading-[1.1] tracking-tight [overflow-wrap:anywhere]">{title}</span>
+          </div>
+        )}
+
+        {/* Velo con botón de reproducir: solo con ratón o al enfocar con teclado; en táctil el cartel entero es el toque. */}
+        <span aria-hidden="true" className="absolute inset-0 flex items-center justify-center bg-scrim opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 [@media(pointer:coarse)]:hidden">
+          <span className="flex size-10 items-center justify-center rounded-full bg-accent text-on-accent"><Icon name="play" className="ml-0.5 size-4" /></span>
         </span>
-        {overlays}
+
+        {watched && (
+          <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-ctl border border-rule bg-bg/90 px-1.5 py-0.5 font-mono text-label text-soft">
+            <Icon name="check" className="size-3" /> VISTA
+          </span>
+        )}
+        {showBar && (
+          <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-[3px] bg-track">
+            <span className="block h-full bg-accent" style={{ width: `${Math.min(100, Math.round(progress * 100))}%` }} />
+          </span>
+        )}
       </div>
-      <p className="mt-2 text-muted group-hover:text-text">{meta}</p>
+
+      <div className="space-y-0.5 pt-2.5">
+        {withPoster && <p className="truncate text-meta font-bold text-text group-hover:text-white" title={title}>{title}</p>}
+        <p className="flex items-baseline justify-between gap-2 font-mono text-label text-faint">
+          <span className={aside ? "truncate" : ""}>{meta}</span>
+          {aside && <span className="shrink-0 text-muted">{aside}</span>}
+        </p>
+      </div>
     </Link>
   );
 }

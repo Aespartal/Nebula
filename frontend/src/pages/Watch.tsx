@@ -29,7 +29,7 @@ function WatchView({ id }: { id: string }) {
   return (
     <div className="mx-auto min-h-dvh max-w-5xl px-4 pb-12">
       <header className="flex items-center justify-between py-3">
-        <Link to={backTo} className="inline-flex min-h-12 items-center gap-1 pr-3 font-bold">
+        <Link to={backTo} className="inline-flex min-h-[var(--control-h)] items-center gap-1 pr-3 font-bold">
           <Icon name="back" className="size-6" /> {backLabel}
         </Link>
         <Wordmark />
@@ -100,14 +100,14 @@ function WatchContent({ info }: { info: MediaFileInfo }) {
 
       <div className="mt-5">
         {info.subtitle && <p className="font-bold text-muted">{info.subtitle}</p>}
-        <h1 ref={h1} tabIndex={-1} className="font-display text-3xl font-semibold leading-tight outline-none md:text-4xl">{info.title}</h1>
+        <h1 ref={h1} tabIndex={-1} className="text-2xl font-bold leading-tight tracking-tight outline-none md:text-3xl">{info.title}</h1>
         {info.overview && <p className="mt-3 max-w-prose text-muted">{info.overview}</p>}
       </div>
 
       {resumeAt > 0 && !startedOver && (
         <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-muted">
           Retomando en {formatClock(resumeAt)}.
-          <button type="button" className="min-h-12 font-bold text-text underline underline-offset-4"
+          <button type="button" className="min-h-[var(--control-h)] font-bold text-text underline underline-offset-4"
             onClick={() => { if (videoRef.current) videoRef.current.currentTime = 0; setStartedOver(true); }}>
             Empezar desde el principio
           </button>
@@ -131,7 +131,7 @@ function WatchContent({ info }: { info: MediaFileInfo }) {
       </div>
 
       <details className="mt-8 border-t border-rule pt-3">
-        <summary className="min-h-12 py-2 font-bold">Detalles técnicos</summary>
+        <summary className="min-h-[var(--control-h)] py-2 font-bold">Detalles técnicos</summary>
         <PlaybackStatus decision={decision} forced={forceTranscode} fellBack={fellBack}
           setForced={(v) => { setFellBack(false); setForceTranscode(v); }} />
         <TechDetails info={info} />
@@ -149,7 +149,7 @@ function AudioPicker({ streams, value, onChange }: { streams: MediaStreamInfo[];
     [languageName(s.language), s.codec?.toUpperCase(), s.channels ? plural(s.channels, "canal", "canales") : null].filter(Boolean).join(" · ");
   return (
     <div>
-      <label htmlFor={id} className="mb-1 block font-bold">Audio</label>
+      <label htmlFor={id} className="mb-1 block text-meta font-bold text-soft">Audio</label>
       <select id={id} value={current} onChange={(e) => onChange(Number(e.target.value))}
         className={selectCls}>
         {audio.map((s) => <option key={s.idx} value={s.idx}>{label(s)}</option>)}
@@ -158,7 +158,7 @@ function AudioPicker({ streams, value, onChange }: { streams: MediaStreamInfo[];
   );
 }
 
-const selectCls = "min-h-12 w-full rounded-md border-2 border-line bg-surface px-3 py-2 text-text";
+const selectCls = "field";
 
 function SubtitlePicker({ streams, value, onChange, state }: {
   streams: MediaStreamInfo[]; value: number | null; onChange: (v: number | null) => void; state: "loading" | "ready" | "error" | null;
@@ -168,7 +168,7 @@ function SubtitlePicker({ streams, value, onChange, state }: {
   if (subs.length === 0) return null;
   return (
     <div>
-      <label htmlFor={id} className="mb-1 block font-bold">Subtítulos</label>
+      <label htmlFor={id} className="mb-1 block text-meta font-bold text-soft">Subtítulos</label>
       <select id={id} value={value === null ? "" : String(value)} className={selectCls}
         onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}>
         <option value="">Sin subtítulos</option>

@@ -8,6 +8,9 @@ $node = (Get-Command node).Source
 if (-not (Get-Command nssm -ErrorAction SilentlyContinue)) { throw "No encuentro NSSM. Instálalo con: winget install NSSM.NSSM" }
 if (-not (Test-Path "$root\frontend\dist")) { throw "Falta frontend\dist. Ejecuta antes: npm run build" }
 
+# NSSM no arranca el servicio si no puede crear el archivo de registro
+New-Item -ItemType Directory -Force "$root\data" | Out-Null
+
 nssm install Nebula $node "--env-file-if-exists=$root\.env" "--import" "tsx" "src/server.ts"
 nssm set Nebula AppDirectory "$root\backend"
 nssm set Nebula DisplayName "Nebula (servidor multimedia)"

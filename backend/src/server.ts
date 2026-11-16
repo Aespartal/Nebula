@@ -18,6 +18,7 @@ import { Tmdb } from "./metadata/tmdb.js";
 import { registerProgressRoutes } from "./progress-routes.js";
 import { registerRoutes } from "./routes.js";
 import { scanLibrary, type LibraryRow } from "./scanner.js";
+import { registerSystemRoutes } from "./system-routes.js";
 import { registerSecurityHeaders } from "./security.js";
 import { LibraryWatcher } from "./watcher.js";
 
@@ -64,6 +65,7 @@ if (encoders.profiles.length > 0) {
   app.log.warn("FFmpeg no está disponible: solo se podrá reproducir en directo lo que el navegador admita. Ejecuta `npm run doctor`.");
 }
 registerPlaybackRoutes(app, db, hls, encoders, config.maxTranscodeSessions);
+registerSystemRoutes(app, db, hls, encoders, config.maxTranscodeSessions);
 registerSubtitleRoutes(app, db, new SubtitleCache(path.join(config.dataDir, "subtitles"), config.ffmpegPath));
 
 // Si existe el build del frontend (npm run build), se sirve desde el mismo puerto.

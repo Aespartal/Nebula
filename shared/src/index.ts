@@ -57,6 +57,19 @@ export interface MediaFileInfo {
 
 export interface ScanStats { added: number; updated: number; unchanged: number; removed: number; skipped: number; failed: number }
 
+/** Por qué el último escaneo no metió un archivo en el catálogo. */
+export type SkippedReason =
+  | "unrecognized_name" // no se detectó temporada y episodio (series)
+  | "probe_failed" // ffprobe no pudo leerlo; `detail` trae el motivo
+  | "download_in_progress"; // descarga sin terminar: entrará sola al acabar
+export interface SkippedFile { libraryId: number; libraryName: string; relPath: string; reason: SkippedReason; detail: string | null }
+/** `items` se recorta a los primeros 500; `total` es la cifra real. `scannedAt`: último escaneo completo de cada biblioteca (ms). */
+export interface SkippedInfo {
+  total: number;
+  libraries: { id: number; name: string; scannedAt: number | null }[];
+  items: SkippedFile[];
+}
+
 // --- Reproducción (fase 3) ---
 
 export interface ClientCapabilities {
@@ -125,6 +138,12 @@ export interface AuthStatus {
   setupRequired: boolean;
   user: SessionUser | null;
 }
+
+/**
+ * Una sesión abierta de la cuenta. `id` es opaco (un trozo del hash del token): sirve para cerrarla, nunca para usarla.
+ * `lastSeen` se renueva como mucho cada 10 minutos, así que es aproximado.
+ */
+export interface AuthSession { id: string; current: boolean; createdAt: number; lastSeen: number; userAgent: string | null }
 
 // --- Progreso (fase 4) ---
 

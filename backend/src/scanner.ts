@@ -1,6 +1,6 @@
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
-import type { ScanStats } from "@nebula/shared";
+import type { ScanStats, SkippedReason } from "@nebula/shared";
 import { SUB_EXTS, VIDEO_EXTS, config } from "./config.js";
 import { isSkippedDir, unsafeLibraryRoot } from "./library-paths.js";
 import type { Db } from "./db/index.js";
@@ -171,13 +171,16 @@ async function doScan(db: Db, lib: LibraryRow): Promise<ScanStats> {
   }
 
   const dirCache = new Map<string, string[]>();
+  const relOf = (file: string) => path.relative(lib.root_path, file).split(path.sep).join("/");
+  // Lo que se deja fuera, con su motivo, para que el administrador sepa por qué algo no aparece en el catálogo.
+  const skipped: { relPath: string; reason: SkippedReason; detail: string | null }[] = [];
   const seen = new Set<string>();
   const todo: { file: string; size: number; mtimeMs: number; isNew: boolean }[] = [];
   for await (const file of walk(lib.root_path)) {
     if (!VIDEO_EXTS.has(path.extname(file).toLowerCase())) continue;
     seen.add(file);
     // Descarga sin terminar: no se toca (ni se añade ni se borra lo que ya hubiera).
-    if (isBusyPath(file)) { stats.skipped++; continue; }
+    if (isBusyPath(file)) { stats.skipped++; skipped.push({ relPath: relOf(file), reason: "download_in_progress", detail: null }); continue; }
     const s = await stat(file);
     const prev = existing.get(file);
     if (prev && prev.size_bytes === s.size && prev.mtime_ms === Math.floor(s.mtimeMs)) {
@@ -190,10 +193,11 @@ async function doScan(db: Db, lib: LibraryRow): Promise<ScanStats> {
   }
 
   const processFile = async (t: (typeof todo)[number]) => {
-    const relPath = path.relative(lib.root_path, t.file).split(path.sep).join("/");
+    const relPath = relOf(t.file);
     const parsed = parseMedia(relPath, lib.type);
     if (!parsed) {
       stats.skipped++;
+      skipped.push({ relPath, reason: "unrecognized_name", detail: null });
       console.warn(`[scan] nombre no reconocido, se omite: ${relPath}`);
       return;
     }
@@ -204,6 +208,7 @@ async function doScan(db: Db, lib: LibraryRow): Promise<ScanStats> {
       subs = await findExternalSubs(t.file, dirCache);
     } catch (err) {
       stats.failed++;
+      skipped.push({ relPath, reason: "probe_failed", detail: probeFailureDetail(err, t.file, relPath) });
       console.warn(`[scan] ffprobe falló en ${relPath}: ${(err as Error).message.split("\n")[0]}`);
       return;
     }
@@ -250,5 +255,24 @@ async function doScan(db: Db, lib: LibraryRow): Promise<ScanStats> {
     stats.removed = gone.length;
   }
   cleanupOrphans(db);
+  recordSkipped(db, lib.id, skipped);
   return stats;
+}
+
+/** Lo que ffprobe dijo (su propia línea de error, no el «Command failed: …» con todos los argumentos), con la ruta relativa. */
+export function probeFailureDetail(err: unknown, absPath: string, relPath: string): string {
+  const e = err as Error & { stderr?: string; code?: string | number };
+  const own = e.stderr?.split(/\r?\n/).find((l) => l.trim());
+  const why = own ?? (e.code === "ENOENT" ? "no se encuentra ffprobe" : (e.message ?? String(err)).split("\n")[0]);
+  return why.split(absPath).join(relPath).trim().slice(0, 300);
+}
+
+/** Sustituye la lista de omitidos de la biblioteca por la del escaneo que acaba de terminar y anota cuándo fue. */
+function recordSkipped(db: Db, libraryId: number, rows: { relPath: string; reason: SkippedReason; detail: string | null }[]) {
+  const ins = db.prepare("INSERT OR REPLACE INTO scan_skipped(library_id,rel_path,reason,detail) VALUES(?,?,?,?)");
+  db.transaction(() => {
+    db.prepare("DELETE FROM scan_skipped WHERE library_id=?").run(libraryId);
+    for (const r of rows) ins.run(libraryId, r.relPath, r.reason, r.detail);
+    db.prepare("INSERT OR REPLACE INTO scan_state(library_id,scanned_at) VALUES(?,?)").run(libraryId, Date.now());
+  })();
 }

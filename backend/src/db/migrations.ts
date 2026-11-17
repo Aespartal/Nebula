@@ -1,7 +1,7 @@
 import type Database from "better-sqlite3";
 
 // Añade migraciones al final; nunca edites las ya publicadas.
-const migrations: string[] = [
+export const migrations: string[] = [
   `
   CREATE TABLE libraries (
     id INTEGER PRIMARY KEY,
@@ -114,6 +114,21 @@ const migrations: string[] = [
   ALTER TABLE media_files ADD COLUMN added_at INTEGER;
   UPDATE media_files SET added_at = mtime_ms;
   CREATE INDEX idx_media_files_added ON media_files(added_at DESC);
+  `,
+  `
+  -- Qué dejó fuera el último escaneo de cada biblioteca y por qué (para «Sistema · Archivos sin catalogar»).
+  -- Se vacía y se rellena entero en cada escaneo: un archivo omitido nunca entra en media_files, así que se reevalúa siempre.
+  CREATE TABLE scan_skipped (
+    library_id INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+    rel_path TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    detail TEXT,
+    PRIMARY KEY (library_id, rel_path)
+  );
+  CREATE TABLE scan_state (
+    library_id INTEGER PRIMARY KEY REFERENCES libraries(id) ON DELETE CASCADE,
+    scanned_at INTEGER NOT NULL
+  );
   `,
 ];
 

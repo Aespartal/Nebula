@@ -25,7 +25,7 @@ Variables: `PORT`, `HOST` (por defecto `127.0.0.1`; `0.0.0.0` para la red local)
 - **Primer arranque**: al abrir Nebula se pide crear la cuenta de administrador. Solo funciona mientras no exista ningún usuario.
 - **Cuentas**: el administrador crea más cuentas desde Ajustes. Cada una tiene su propio progreso («Seguir viendo», visto/no visto). Todas las cuentas ven todas las carpetas; añadir carpetas y gestionar cuentas es solo del administrador.
 - **Contraseñas**: `scrypt` con sal propia (viene con Node, no hay que compilar nada). Mínimo 8 caracteres.
-- **Sesiones**: cookie `HttpOnly` + `SameSite=Lax` (y `Secure` en HTTPS); en la base de datos solo se guarda el hash del token. Caducan a los 30 días sin uso, se revocan al cerrar sesión, al cambiar la contraseña y al borrar la cuenta. Como el vídeo va por el mismo origen, `<video>` y hls.js envían la cookie solos: no hacen falta URLs firmadas.
+- **Sesiones**: cookie `HttpOnly` + `SameSite=Lax` (y `Secure` en HTTPS); en la base de datos solo se guarda el hash del token. Caducan a los 30 días sin uso, se revocan al cerrar sesión, al cambiar la contraseña y al borrar la cuenta. En **Tu cuenta → Sesiones abiertas** se ven los dispositivos donde has entrado (la hora de actividad es aproximada) y se puede cerrar cada uno o todos menos el actual. Como el vídeo va por el mismo origen, `<video>` y hls.js envían la cookie solos: no hacen falta URLs firmadas.
 - **Protección**: toda la API (vídeo incluido) exige sesión salvo `/api/health` y el acceso; bloqueo temporal tras 5 intentos fallidos; las peticiones que cambian datos desde otro origen se rechazan (CSRF); no hay CORS.
 - **Antes de abrirlo a Internet** hace falta HTTPS (ver «Publicar en Internet»): sin cifrado, la contraseña y la cookie viajan en claro. Si escuchas en la red sin HTTPS ni proxy, Nebula lo avisa en el registro.
 - **Cabeceras**: política de contenido estricta (CSP), `nosniff`, sin incrustación en otras webs (`frame-ancestors 'none'`), `Referrer-Policy: no-referrer` y HSTS cuando la conexión es HTTPS.
@@ -52,7 +52,7 @@ Limitación actual: no hay *remux* (copiar el vídeo sin recodificar cuando solo
 
 ## Sistema (administradores)
 
-La pestaña **Sistema** muestra las conversiones de FFmpeg en curso (con qué ruta, GPU o CPU, y hasta dónde va cada una; se pueden detener) y el almacenamiento de cada carpeta: vídeo que ocupa, uso del disco y espacio libre.
+La pestaña **Sistema** muestra las conversiones de FFmpeg en curso (con qué ruta, GPU o CPU, y hasta dónde va cada una; se pueden detener) y el almacenamiento de cada carpeta: vídeo que ocupa, uso del disco y espacio libre. También lista los **archivos sin catalogar** del último escaneo (nombre no reconocido, ffprobe falló o descarga en curso), con el motivo y la ruta, y un botón para volver a escanear.
 
 ## Descargas (administradores)
 

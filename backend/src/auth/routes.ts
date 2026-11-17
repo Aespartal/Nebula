@@ -1,10 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import type { AuthStatus, User } from "@nebula/shared";
+import type { AuthSession, AuthStatus, User } from "@nebula/shared";
 import type { Db } from "../db/index.js";
 import { clearSessionCookie, requireAdmin, setSessionCookie } from "./plugin.js";
 import { FailureLimiter } from "./limiter.js";
 import { DUMMY_HASH, hashPassword, verifyPassword } from "./password.js";
-import { createSession, deleteSession, deleteUserSessions, type Role } from "./sessions.js";
+import { createSession, deleteSession, deleteUserSessions, listUserSessions, revokeSession, type Role } from "./sessions.js";
 
 const USERNAME_RE = /^[\p{L}\p{N}_.-]{3,32}$/u;
 export const MIN_PASSWORD = 8;
@@ -82,6 +82,19 @@ export function registerAuthRoutes(app: FastifyInstance, db: Db) {
   app.post("/api/auth/logout", async (req, reply) => {
     if (req.sessionToken) deleteSession(db, req.sessionToken);
     clearSessionCookie(reply);
+    return reply.code(204).send();
+  });
+
+  // --- Sesiones abiertas de la propia cuenta: ver desde dónde se entró y cerrar las que ya no se usan ---
+  app.get("/api/auth/sessions", async (req): Promise<AuthSession[]> => listUserSessions(db, req.user!.id, req.sessionToken));
+
+  // Cerrar el resto: todas menos la actual.
+  app.delete("/api/auth/sessions", async (req) => ({ closed: deleteUserSessions(db, req.user!.id, req.sessionToken ?? undefined) }));
+
+  app.delete<{ Params: { id: string } }>("/api/auth/sessions/:id", async (req, reply) => {
+    const r = revokeSession(db, req.user!.id, req.params.id, req.sessionToken);
+    if (r === "not_found") return reply.code(404).send({ error: "not_found" });
+    if (r === "current") return reply.code(409).send({ error: "current_session" });
     return reply.code(204).send();
   });
 

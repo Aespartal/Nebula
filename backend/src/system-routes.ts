@@ -1,6 +1,6 @@
 import { statfs } from "node:fs/promises";
 import type { FastifyInstance } from "fastify";
-import type { ConversionsInfo, StorageLibrary } from "@nebula/shared";
+import type { ConversionsInfo, SkippedFile, SkippedInfo, StorageLibrary } from "@nebula/shared";
 import { requireAdmin } from "./auth/plugin.js";
 import type { Db } from "./db/index.js";
 import type { EncoderInfo } from "./ffmpeg/encoders.js";
@@ -34,6 +34,19 @@ export function registerSystemRoutes(app: FastifyInstance, db: Db, hls: HlsSessi
     await hls.stop(req.params.id);
     return { ok: true };
   });
+
+  // Lo que el último escaneo no metió en el catálogo. Solo administradores: enseña rutas del servidor.
+  const MAX_SKIPPED = 500;
+  app.get("/api/system/skipped", { preHandler: requireAdmin }, async (): Promise<SkippedInfo> => ({
+    total: (db.prepare("SELECT COUNT(*) AS n FROM scan_skipped").get() as { n: number }).n,
+    libraries: db.prepare(`
+      SELECT l.id, l.name, st.scanned_at AS scannedAt
+      FROM libraries l LEFT JOIN scan_state st ON st.library_id = l.id ORDER BY l.id`).all() as SkippedInfo["libraries"],
+    items: db.prepare(`
+      SELECT s.library_id AS libraryId, l.name AS libraryName, s.rel_path AS relPath, s.reason, s.detail
+      FROM scan_skipped s JOIN libraries l ON l.id = s.library_id
+      ORDER BY l.id, s.rel_path COLLATE NOCASE LIMIT ?`).all(MAX_SKIPPED) as SkippedFile[],
+  }));
 
   app.get("/api/system/storage", { preHandler: requireAdmin }, async (): Promise<StorageLibrary[]> => {
     const libs = db.prepare(`

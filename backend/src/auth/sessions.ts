@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import type { AuthSession } from "@nebula/shared";
 import type { Db } from "../db/index.js";
 
 export type Role = "admin" | "user";
@@ -34,10 +35,35 @@ export function getSessionUser(db: Db, token: string, now = Date.now()): AuthUse
 
 export const deleteSession = (db: Db, token: string) => db.prepare("DELETE FROM sessions WHERE token_hash=?").run(hashToken(token));
 
-/** Cierra todas las sesiones de un usuario, salvo (opcionalmente) la actual. */
-export function deleteUserSessions(db: Db, userId: number, exceptToken?: string) {
-  if (exceptToken) db.prepare("DELETE FROM sessions WHERE user_id=? AND token_hash<>?").run(userId, hashToken(exceptToken));
-  else db.prepare("DELETE FROM sessions WHERE user_id=?").run(userId);
+/** Cierra todas las sesiones de un usuario, salvo (opcionalmente) la actual. Devuelve cuántas cerró. */
+export function deleteUserSessions(db: Db, userId: number, exceptToken?: string): number {
+  return exceptToken
+    ? db.prepare("DELETE FROM sessions WHERE user_id=? AND token_hash<>?").run(userId, hashToken(exceptToken)).changes
+    : db.prepare("DELETE FROM sessions WHERE user_id=?").run(userId).changes;
+}
+
+// Identificador que se enseña al cliente: 16 hex (64 bits) del hash del token. No permite reconstruir el token ni usar la sesión.
+const sessionId = (tokenHash: string) => tokenHash.slice(0, 16);
+
+/** Las sesiones vigentes de un usuario, la más reciente primero, con la actual marcada. */
+export function listUserSessions(db: Db, userId: number, currentToken?: string | null, now = Date.now()): AuthSession[] {
+  const current = currentToken ? hashToken(currentToken) : null;
+  return (db.prepare(`
+    SELECT token_hash AS h, created_at AS createdAt, last_seen AS lastSeen, user_agent AS userAgent
+    FROM sessions WHERE user_id=? AND expires_at>? ORDER BY last_seen DESC, created_at DESC`).all(userId, now) as
+    { h: string; createdAt: number; lastSeen: number; userAgent: string | null }[])
+    .map((r) => ({ id: sessionId(r.h), current: r.h === current, createdAt: r.createdAt, lastSeen: r.lastSeen, userAgent: r.userAgent }));
+}
+
+/** Cierra una sesión de ESTE usuario por su id. La actual no se cierra así (para eso está «Cerrar sesión»). */
+export function revokeSession(db: Db, userId: number, id: string, currentToken?: string | null): "ok" | "not_found" | "current" {
+  if (!/^[0-9a-f]{16}$/.test(id)) return "not_found";
+  const row = db.prepare("SELECT token_hash AS h FROM sessions WHERE user_id=? AND substr(token_hash,1,16)=?").get(userId, id) as
+    | { h: string } | undefined;
+  if (!row) return "not_found"; // inexistente o de otra cuenta: no se distingue
+  if (currentToken && row.h === hashToken(currentToken)) return "current";
+  db.prepare("DELETE FROM sessions WHERE token_hash=?").run(row.h);
+  return "ok";
 }
 
 export const purgeExpiredSessions = (db: Db, now = Date.now()) => db.prepare("DELETE FROM sessions WHERE expires_at<=?").run(now);

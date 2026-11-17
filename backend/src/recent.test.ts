@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { openDb, type Db } from "./db/index.js";
-import { migrate } from "./db/migrations.js";
+import Database from "better-sqlite3";
+import { openDb } from "./db/index.js";
+import { migrations } from "./db/migrations.js";
 import { BATCH_MS, recentlyAdded } from "./recent.js";
 
 const H = 3600 * 1000;
@@ -107,16 +108,14 @@ test("catálogo vacío: lista vacía", () => {
   assert.deepEqual(recentlyAdded(setup().db), []);
 });
 
-test("la migración rellena added_at con la fecha del archivo en lo que ya había", () => {
-  const db: Db = openDb(":memory:");
+test("la migración de added_at rellena lo que ya había con la fecha del archivo", () => {
+  // Esquema de antes de esta migración (las 4 primeras) con datos como los dejaría una versión vieja; luego, solo esa migración.
+  const db = new Database(":memory:");
+  for (let i = 0; i < 4; i++) db.exec(migrations[i]);
   db.prepare("INSERT INTO libraries(id,name,type,root_path) VALUES(1,'B','movies','/x')").run();
   const mid = db.prepare("INSERT INTO movies(library_id,title) VALUES(1,'Antigua')").run().lastInsertRowid;
-  // Se vuelve al esquema anterior a la migración y se inserta como lo haría una versión vieja.
-  db.exec("DROP INDEX idx_media_files_added; ALTER TABLE media_files DROP COLUMN added_at;");
-  db.pragma("user_version = 4");
   db.prepare("INSERT INTO media_files(library_id,movie_id,path,rel_path,size_bytes,mtime_ms) VALUES(1,?, '/x/1','1',1,123456)").run(mid);
-  migrate(db);
-  assert.equal(db.pragma("user_version", { simple: true }), 5);
+  db.exec(migrations[4]);
   assert.equal((db.prepare("SELECT added_at FROM media_files").get() as { added_at: number }).added_at, 123456);
-  assert.equal(recentlyAdded(db)[0].addedAt, 123456);
+  assert.equal(recentlyAdded(db as any)[0].addedAt, 123456);
 });

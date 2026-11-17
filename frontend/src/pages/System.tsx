@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import type { ConversionsInfo, ConversionSession, StorageLibrary } from "@nebula/shared";
+import type { ConversionsInfo, ConversionSession, SkippedInfo, SkippedReason, StorageLibrary } from "@nebula/shared";
 import { Button } from "../components/Button";
 import { Icon } from "../components/Icon";
 import { PageHeading } from "../components/PageHeading";
 import { Empty, ErrorBox, Loading } from "../components/States";
 import { useUser } from "../lib/auth";
-import { formatBytes, formatClock } from "../lib/format";
+import { formatAgo, formatBytes, formatClock, plural } from "../lib/format";
 import { sendJson, useApi } from "../lib/useApi";
 import { usePageTitle } from "../lib/usePageTitle";
 
@@ -133,6 +133,76 @@ function Storage() {
   );
 }
 
+const SKIPPED_REASON: Record<SkippedReason, string> = {
+  unrecognized_name: "No se detectó la temporada y el episodio en el nombre (por ejemplo S01E01).",
+  probe_failed: "FFmpeg no pudo leer el archivo.",
+  download_in_progress: "Descarga sin terminar: entrará sola cuando acabe.",
+};
+
+/** Lo que el último escaneo dejó fuera del catálogo, con el porqué: responde a «¿por qué no sale lo que descargué?». */
+function Skipped() {
+  const { data, error, loading, reload } = useApi<SkippedInfo>("/api/system/skipped");
+  const [scanning, setScanning] = useState(false);
+  const [note, setNote] = useState("");
+
+  async function rescan() {
+    setScanning(true); setNote("");
+    const r = await sendJson("POST", "/api/scan", {});
+    setScanning(false);
+    setNote(r.ok ? "Escaneo terminado." : r.status === 409 ? "Ya hay un escaneo en curso. Espera a que termine." : "No se pudo escanear.");
+    reload();
+  }
+
+  const scannedAt = Math.max(0, ...(data?.libraries.map((l) => l.scannedAt ?? 0) ?? []));
+  const groups = new Map<string, SkippedInfo["items"]>();
+  for (const i of data?.items ?? []) groups.set(i.libraryName, [...(groups.get(i.libraryName) ?? []), i]);
+
+  return (
+    <section aria-labelledby="omit" className="mt-12">
+      <div className="mb-4 flex flex-col gap-3 border-b border-rule pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="label">{scannedAt ? `Último escaneo ${formatAgo(scannedAt)}` : "Todavía sin escanear"}</div>
+          <h2 id="omit" className="text-lg font-bold tracking-tight">Archivos sin catalogar</h2>
+        </div>
+        <Button variant="secondary" onClick={rescan} disabled={scanning} aria-busy={scanning}>
+          {scanning ? "Escaneando…" : "Escanear ahora"}
+        </Button>
+      </div>
+      {loading && !data && <Loading />}
+      {error && <ErrorBox message={error} onRetry={reload} />}
+      <p role="status" className="mb-3 min-h-6 text-muted">{note}</p>
+      {data && data.libraries.length === 0 && <Empty title="Todavía no hay carpetas">Añádelas en Ajustes.</Empty>}
+      {data && data.libraries.length > 0 && data.total === 0 && (
+        <Empty title="Todo está en el catálogo">El último escaneo no dejó ningún archivo fuera.</Empty>
+      )}
+      {data && data.total > 0 && (
+        <>
+          <p className="mb-4 text-muted">
+            {plural(data.total, "archivo de vídeo no ha entrado", "archivos de vídeo no han entrado")} en el catálogo.
+            {data.total > data.items.length && ` Se muestran los primeros ${data.items.length}.`}
+          </p>
+          <div className="space-y-6">
+            {[...groups].map(([name, items]) => (
+              <div key={name}>
+                <h3 className="label mb-2">{name} · {items.length}</h3>
+                <ul className="divide-y divide-rule rounded-ctl border border-rule bg-surface">
+                  {items.map((i) => (
+                    <li key={i.relPath} className="p-4">
+                      <p className="break-all font-mono text-meta">{i.relPath}</p>
+                      <p className="mt-1 text-muted">{SKIPPED_REASON[i.reason]}</p>
+                      {i.detail && <p className="mt-1 break-all font-mono text-label text-faint">{i.detail}</p>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 export default function System() {
   usePageTitle("Sistema");
   const user = useUser();
@@ -149,6 +219,7 @@ export default function System() {
       <PageHeading title="Sistema" eyebrow="Este equipo" />
       <Conversions />
       <Storage />
+      <Skipped />
     </>
   );
 }

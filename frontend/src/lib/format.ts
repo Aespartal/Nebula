@@ -54,6 +54,10 @@ export function formatEta(seconds: number | null): string {
   return `${h} h ${m % 60} min`;
 }
 
+/** 1 748 000 000 000 → «12 nov 2026». */
+export const formatDate = (ms: number): string =>
+  new Date(ms).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }).replace(/\./g, "");
+
 /** «ahora», «hace 5 min», «hace 3 h», «hace 2 d», «hace 4 meses»: cuándo entró algo en el catálogo. */
 export function formatAgo(ms: number, now = Date.now()): string {
   const min = Math.floor((now - ms) / 60000);

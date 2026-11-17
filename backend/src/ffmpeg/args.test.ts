@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildHlsArgs, buildPlaylist, maxrateKbps, segmentCount, segmentName, targetSize, type HlsJob } from "./args.js";
+import { buildHlsArgs, buildPlaylist, maxrateKbps, segmentCount, segmentName, targetSize, type HlsJob, buildRemuxPlaylist, buildRemuxSegmentArgs } from "./args.js";
 
 const job = (o: Partial<HlsJob> = {}): HlsJob => ({
   input: "/v/peli.mkv", startSeg: 0, segCount: 10, segDur: 6, videoIdx: 0, audioIdx: 1,
@@ -89,4 +89,54 @@ test("el nombre de salida es relativo (se ejecuta con cwd en la sesión)", () =>
   const a = buildHlsArgs(job());
   assert.equal(a[a.length - 1], "ffmpeg.m3u8");
   assert.equal(val(a, "-hls_segment_filename"), "seg_%05d.ts");
+});
+
+// --- Remux ---
+const remuxJob = (o: Partial<Parameters<typeof buildRemuxSegmentArgs>[0]> = {}) =>
+  ({ input: "/p/peli.mkv", bounds: [0, 10.005, 20.005, 30], n: 1, videoIdx: 0, audioIdx: 1, delay: 0.08, ...o });
+const after = (a: string[], flag: string) => a[a.indexOf(flag) + 1];
+
+test("remux: el vídeo se copia, el audio pasa a AAC estéreo y no se recodifica nada de vídeo", () => {
+  const a = buildRemuxSegmentArgs(remuxJob(), "out.part");
+  assert.equal(after(a, "-c:v"), "copy");
+  assert.equal(after(a, "-c:a"), "aac");
+  assert.ok(!a.includes("libx264") && !a.includes("h264_nvenc") && !a.includes("-vf"));
+  assert.equal(after(a, "-copypriorss:v"), "0");
+  assert.equal(a[a.length - 1], "out.part");
+  assert.deepEqual(a.slice(a.indexOf("-map"), a.indexOf("-map") + 4), ["-map", "0:0", "-map", "0:1"]);
+});
+
+test("remux: busca justo antes del keyframe, corta por el dts del siguiente y mantiene las marcas del original", () => {
+  const a = buildRemuxSegmentArgs(remuxJob(), "o");
+  assert.equal(after(a, "-ss"), "9.985"); // keyframe 10.005 - margen
+  assert.equal(after(a, "-t"), "9.939"); // hasta (20.005 - delay 0.08 - 0.001) = 19.924, desde 9.985
+  assert.equal(after(a, "-output_ts_offset"), "10.065"); // buscar - margen + retardo: todos los segmentos con pts = original + 0.08
+});
+
+test("remux: el primer segmento lleva el mismo desplazamiento que los demás (sin caso especial)", () => {
+  const a = buildRemuxSegmentArgs(remuxJob({ n: 0 }), "o");
+  assert.equal(after(a, "-ss"), "0.000");
+  assert.equal(after(a, "-output_ts_offset"), "0.080");
+  assert.equal(after(buildRemuxSegmentArgs(remuxJob({ n: 0, delay: 0 }), "o"), "-output_ts_offset"), "0.000");
+});
+
+test("remux: el último segmento llega hasta el final del archivo (sin -t)", () => {
+  const a = buildRemuxSegmentArgs(remuxJob({ n: 2 }), "o");
+  assert.ok(!a.includes("-t"));
+  assert.equal(after(a, "-ss"), "19.985");
+});
+
+test("remux: sin pista de audio no se mapea ni se convierte audio", () => {
+  const a = buildRemuxSegmentArgs(remuxJob({ audioIdx: null }), "o");
+  assert.ok(!a.includes("-c:a") && !a.includes("-af"));
+  assert.deepEqual(a.filter((x) => x === "-map"), ["-map"], "solo el vídeo");
+});
+
+test("remux: la playlist tiene la duración real de cada segmento y el TARGETDURATION cubre al mayor", () => {
+  const p = buildRemuxPlaylist([0, 13, 22.5, 60]);
+  const lens = p.split("\n").filter((l) => l.startsWith("#EXTINF")).map((l) => Number(l.slice(8, -1)));
+  assert.deepEqual(lens, [13, 9.5, 37.5]);
+  assert.ok(p.includes("#EXT-X-TARGETDURATION:38"));
+  assert.ok(p.includes("seg_00002.ts") && !p.includes("seg_00003.ts"));
+  assert.ok(p.trimEnd().endsWith("#EXT-X-ENDLIST") && p.includes("#EXT-X-PLAYLIST-TYPE:VOD"));
 });

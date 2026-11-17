@@ -43,7 +43,8 @@ Variables: `PORT`, `HOST` (por defecto `127.0.0.1`; `0.0.0.0` para la red local)
 El navegador informa de lo que sabe reproducir y el servidor decide:
 
 - **Directa**: contenedor, vídeo y audio compatibles → se envía el archivo tal cual (con `Range`).
-- **Convertida**: en otro caso FFmpeg genera HLS al vuelo (H.264 + AAC, hasta 1080p). La línea de tiempo es la del vídeo completo, así que se puede saltar a cualquier punto.
+- **Sin recodificar el vídeo** (*remux*): si el vídeo sí lo admite el navegador (H.264 u HEVC de 8 bits) y solo falla el contenedor (p. ej. `.mkv`) o el audio (AC3, DTS…, o una pista que no es la predeterminada), Nebula envía la imagen tal cual y solo convierte el audio a AAC. Apenas gasta CPU ni GPU y no pierde calidad. Los cortes caen en los fotogramas clave del original (segmentos de unos 6 s), que se indexan con `ffprobe` la primera vez que se reproduce el archivo y se guardan en la base de datos: **en ese primer reproducido, si el índice tarda más de unos segundos (archivos muy grandes), se convierte como siempre y las siguientes veces ya se hace remux**. Si algo falla, el reproductor pasa solo a la conversión completa.
+- **Convertida**: en otro caso (códec o perfil de vídeo no compatible, 10 bits, límite de ancho de banda, o conversión forzada) FFmpeg genera HLS al vuelo (H.264 + AAC, hasta 1080p). La línea de tiempo es la del vídeo completo, así que se puede saltar a cualquier punto.
 - Si el navegador dice poder y luego falla, la app cambia sola a conversión y retoma por donde iba.
 - Rutas de conversión, por orden: GPU NVIDIA completa → decodificación en CPU + NVENC → CPU (x264). Si una no funciona en tu equipo, Nebula pasa a la siguiente sola.
 

@@ -130,6 +130,17 @@ export const migrations: string[] = [
     scanned_at INTEGER NOT NULL
   );
   `,
+  // Fase 3: instantes de los fotogramas clave de cada vídeo, para cortar segmentos al hacer remux sin recodificar.
+  // Se descarta si cambia el archivo (mtime/tamaño); `data` es JSON {pts:[...], delay}.
+  `
+  CREATE TABLE keyframe_index (
+    file_id INTEGER PRIMARY KEY REFERENCES media_files(id) ON DELETE CASCADE,
+    mtime_ms INTEGER NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    video_idx INTEGER NOT NULL,
+    data TEXT NOT NULL
+  );
+  `,
 ];
 
 export function migrate(db: Database.Database) {

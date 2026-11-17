@@ -12,6 +12,7 @@ import { registerAuthRoutes } from "./auth/routes.js";
 import { SubtitleCache } from "./subtitles.js";
 import { registerSubtitleRoutes } from "./subtitles-routes.js";
 import { registerCastRoutes } from "./cast.js";
+import { KeyframeIndex } from "./ffmpeg/keyframes.js";
 import { registerPlaybackRoutes } from "./playback-routes.js";
 import { MetadataService } from "./metadata/service.js";
 import { registerMetadataRoutes } from "./metadata/routes.js";
@@ -74,7 +75,8 @@ if (encoders.profiles.length > 0) {
 } else {
   app.log.warn("FFmpeg no está disponible: solo se podrá reproducir en directo lo que el navegador admita. Ejecuta `npm run doctor`.");
 }
-registerPlaybackRoutes(app, db, hls, encoders, config.maxTranscodeSessions, !!config.publicUrl);
+const keyframes = hls ? new KeyframeIndex(db, config.ffprobePath, undefined, (m) => app.log.info(m)) : null;
+registerPlaybackRoutes(app, db, hls, encoders, config.maxTranscodeSessions, !!config.publicUrl, keyframes);
 registerCastRoutes(app, db, hls, { publicUrl: config.publicUrl });
 registerSystemRoutes(app, db, hls, encoders, config.maxTranscodeSessions);
 registerSubtitleRoutes(app, db, new SubtitleCache(path.join(config.dataDir, "subtitles"), config.ffmpegPath));

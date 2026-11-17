@@ -27,9 +27,9 @@ test("mp4 h264+aac en Chrome: Direct Play", () => {
   assert.deepEqual(d.reasons, []);
   assert.equal(d.audioIdx, 1);
 });
-test("mkv sin soporte de contenedor: convierte", () => {
+test("mkv sin soporte de contenedor: remux (el vídeo no se toca)", () => {
   const d = run({ ext: ".mkv", container: "matroska,webm" });
-  assert.equal(d.mode, "transcode");
+  assert.equal(d.mode, "remux");
   assert.deepEqual(codes(d), ["container"]);
 });
 test("mkv con navegador que lo admite: Direct Play", () => {
@@ -53,7 +53,7 @@ test("audio AC3 en mp4 sin soporte: convierte por audio", () => {
 test("pista de audio distinta de la predeterminada exige convertir", () => {
   const streams = [v(), a({ idx: 1, language: "spa" }), a({ idx: 2, language: "eng", isDefault: false })];
   const d = run({ streams, audioStreamIdx: 2 });
-  assert.equal(d.mode, "transcode");
+  assert.equal(d.mode, "remux");
   assert.deepEqual(codes(d), ["audio_track"]);
   assert.equal(d.audioIdx, 2);
 });
@@ -85,21 +85,68 @@ test("detección de contenedor por extensión en matroska/webm", () => {
 // aparecen hoy en los escenarios donde un modo remux (-c:v copy) tendría sentido.
 const mkv = { ext: ".mkv", container: "matroska,webm" };
 
-test("mkv H.264 8 bits + AC3: hoy convierte solo por contenedor y audio (candidato a remux)", () => {
+test("mkv H.264 8 bits + AC3: remux, solo se convierte el audio", () => {
   const d = run({ ...mkv, streams: [v(), a({ codec: "ac3" })] });
-  assert.equal(d.mode, "transcode");
+  assert.equal(d.mode, "remux");
   assert.deepEqual(codes(d), ["container", "audio_codec"]);
 });
-test("mkv H.264 + AAC con segunda pista de audio: contenedor y pista (candidato a remux)", () => {
+test("mkv H.264 + AAC con segunda pista de audio: contenedor y pista, remux", () => {
   const streams = [v(), a({ idx: 1, language: "spa" }), a({ idx: 2, language: "eng", isDefault: false })];
   const d = run({ ...mkv, streams, audioStreamIdx: 2 });
   assert.deepEqual(codes(d), ["container", "audio_track"]);
+  assert.equal(d.mode, "remux");
 });
-test("mkv HEVC 10 bits + AC3: hay motivo de vídeo, no es candidato a remux", () => {
+test("mkv HEVC 10 bits + AC3: el vídeo no es válido para el navegador, se recodifica", () => {
   const d = run({ ...mkv, streams: [v({ codec: "hevc", profile: "Main 10", pixFmt: "yuv420p10le" }), a({ codec: "ac3" })] });
   assert.deepEqual(codes(d), ["container", "video_codec", "audio_codec"]);
+  assert.equal(d.mode, "transcode");
 });
 test("mkv H.264 + AC3 por encima del bitrate del cliente: el bitrate se suma a los motivos", () => {
   const d = run({ ...mkv, streams: [v(), a({ codec: "ac3" })], caps: { ...chrome, maxBitrate: 2_000_000 } });
   assert.deepEqual(codes(d), ["container", "audio_codec", "bitrate"]);
+});
+
+// --- Remux: cuándo sí y cuándo no ---
+const hevcOk: ClientCapabilities = { ...chrome, video: { ...chrome.video, hevc: true } };
+
+test("remux: HEVC 8 bits en mkv con un navegador que lo decodifica", () => {
+  const d = run({ ...mkv, streams: [v({ codec: "hevc", profile: "Main" }), a({ codec: "eac3" })], caps: hevcOk });
+  assert.equal(d.mode, "remux");
+});
+test("sin remux: HEVC cuando el navegador no lo decodifica", () => {
+  const d = run({ ...mkv, streams: [v({ codec: "hevc", profile: "Main" }), a({ codec: "ac3" })] });
+  assert.equal(d.mode, "transcode");
+});
+test("sin remux: H.264 de 10 bits (el navegador no lo decodifica aunque cambie la caja)", () => {
+  const d = run({ ...mkv, streams: [v({ profile: "High 10", pixFmt: "yuv420p10le" }), a({ codec: "ac3" })] });
+  assert.equal(d.mode, "transcode");
+});
+test("sin remux: VP9 y AV1 no caben en los segmentos MPEG-TS de HLS", () => {
+  for (const codec of ["vp9", "av1"]) {
+    const d = run({ ...mkv, streams: [v({ codec }), a({ codec: "ac3" })] });
+    assert.equal(d.mode, "transcode", codec);
+  }
+});
+test("sin remux: conversión forzada por el usuario", () => {
+  const d = run({ ...mkv, streams: [v(), a({ codec: "ac3" })], forceTranscode: true });
+  assert.equal(d.mode, "transcode");
+  assert.ok(codes(d).includes("forced"));
+});
+test("sin remux: el límite de bitrate del cliente exige reducir", () => {
+  const d = run({ ...mkv, streams: [v(), a({ codec: "ac3" })], caps: { ...chrome, maxBitrate: 2_000_000 } });
+  assert.equal(d.mode, "transcode");
+});
+test("remux: avi/ts con H.264 8 bits (la caja no admite el códec, pero el navegador sí)", () => {
+  const d = run({ ext: ".avi", container: "avi", streams: [v(), a({ codec: "mp3" })] });
+  assert.equal(d.mode, "remux");
+  assert.deepEqual(codes(d), ["container", "audio_codec"], "no se acusa al vídeo: el navegador sí lo admite");
+});
+test("remux sin pista de audio: solo cambia la caja", () => {
+  const d = run({ ...mkv, streams: [v()] });
+  assert.equal(d.mode, "remux");
+  assert.equal(d.audioIdx, null);
+});
+test("remux o conversión sin HLS en el navegador: no reproducible", () => {
+  const d = run({ ...mkv, streams: [v(), a({ codec: "ac3" })], caps: { ...chrome, hls: "none" } });
+  assert.equal(d.mode, "unplayable");
 });

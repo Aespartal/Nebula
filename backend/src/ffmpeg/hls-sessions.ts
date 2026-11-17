@@ -1,8 +1,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { access, mkdir, readdir, rm } from "node:fs/promises";
+import { access, mkdir, readdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
-import { buildHlsArgs, buildPlaylist, segmentCount, segmentName, type ProfileName } from "./args.js";
+import { buildHlsArgs, buildPlaylist, buildRemuxPlaylist, buildRemuxSegmentArgs, segmentCount, segmentName, type ProfileName } from "./args.js";
 
 export interface SessionParams {
   fileId: number;
@@ -13,6 +13,8 @@ export interface SessionParams {
   sourceWidth: number | null;
   sourceHeight: number | null;
   maxHeight: number;
+  /** Presente = sesión de remux: el vídeo se copia y los segmentos caen en estos keyframes (ver buildRemuxSegmentArgs). */
+  remux?: { bounds: number[]; delay: number };
 }
 
 export interface HlsOptions {
@@ -50,10 +52,15 @@ export interface Session {
   lastAccess: number;
   lastRequested: number;
   startedAt: number;
+  /** Remux: segmentos que se están produciendo ahora (n → resultado) y sus procesos. */
+  jobs: Map<number, Promise<boolean>>;
+  procs: Set<ChildProcess>;
 }
 
 const PREFETCH = 6; // segmentos por delante de la reproducción que se mantienen listos
 const KEEP_BEHIND = 20; // segmentos ya vistos que se conservan en disco
+const REMUX_PREFETCH = 3; // en remux cada segmento cuesta poco, no hace falta adelantar tanto
+const REMUX_MAX_PARALLEL = 2;
 
 const exists = (f: string) => access(f).then(() => true, () => false);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -95,8 +102,12 @@ export class HlsSessions {
     const now = Date.now();
     return [...this.sessions.values()].map((s) => ({
       id: s.id, fileId: s.params.fileId, durationS: s.params.durationS, maxHeight: s.params.maxHeight,
-      profile: s.run?.profile ?? null, running: !!s.run && !s.run.killed, failed: s.failed,
-      segmentsTotal: s.total, positionS: Math.round(s.lastRequested * this.segDur),
+      profile: s.params.remux ? "copy" : (s.run?.profile ?? null),
+      running: s.params.remux ? s.procs.size > 0 : !!s.run && !s.run.killed, failed: s.failed,
+      segmentsTotal: s.total,
+      positionS: s.params.remux
+        ? Math.round(s.params.remux.bounds[Math.min(s.lastRequested, s.total - 1)] - s.params.remux.bounds[0])
+        : Math.round(s.lastRequested * this.segDur),
       idleS: Math.round((now - s.lastAccess) / 1000), ageS: Math.round((now - s.startedAt) / 1000),
     }));
   }
@@ -109,7 +120,8 @@ export class HlsSessions {
   async create(params: SessionParams): Promise<Session> {
     for (const s of this.sessions.values()) {
       const p = s.params;
-      if (!s.failed && !s.closed && p.input === params.input && p.audioIdx === params.audioIdx && p.maxHeight === params.maxHeight) {
+      if (!s.failed && !s.closed && p.input === params.input && p.audioIdx === params.audioIdx && p.maxHeight === params.maxHeight
+        && !!p.remux === !!params.remux) {
         s.lastAccess = Date.now();
         return s;
       }
@@ -122,8 +134,9 @@ export class HlsSessions {
     const dir = path.join(this.o.baseDir, id);
     await mkdir(dir, { recursive: true });
     const s: Session = {
-      id, params, dir, total: segmentCount(params.durationS, this.segDur),
+      id, params, dir, total: params.remux ? params.remux.bounds.length - 1 : segmentCount(params.durationS, this.segDur),
       run: null, failed: false, closed: false, lastAccess: Date.now(), lastRequested: 0, startedAt: Date.now(),
+      jobs: new Map(), procs: new Set(),
     };
     this.sessions.set(id, s);
     return s;
@@ -136,11 +149,12 @@ export class HlsSessions {
   }
 
   playlist(s: Session): string {
-    return buildPlaylist(s.params.durationS, this.segDur);
+    return s.params.remux ? buildRemuxPlaylist(s.params.remux.bounds) : buildPlaylist(s.params.durationS, this.segDur);
   }
 
   /** Ruta del segmento n, produciéndolo si hace falta. null si no se pudo. */
   async segment(s: Session, n: number): Promise<string | null> {
+    if (s.params.remux) return this.remuxSegment(s, n);
     s.lastAccess = Date.now();
     if (n < 0 || n >= s.total || s.closed) return null;
     s.lastRequested = n;
@@ -232,6 +246,7 @@ export class HlsSessions {
   }
 
   private kill(s: Session) {
+    for (const p of s.procs) p.kill();
     if (s.run) {
       s.run.killed = true;
       s.run.proc.kill();
@@ -251,6 +266,74 @@ export class HlsSessions {
 
   private async afterServe(s: Session, n: number) {
     await this.prefetch(s, n);
+    await this.trim(s, n);
+  }
+
+  // --- Remux: un proceso de FFmpeg por segmento, copiando el vídeo ---
+
+  private async remuxSegment(s: Session, n: number): Promise<string | null> {
+    s.lastAccess = Date.now();
+    if (n < 0 || n >= s.total || s.closed || s.failed) return null;
+    s.lastRequested = n;
+    const file = path.join(s.dir, segmentName(n));
+    if (!(await exists(file)) && !(await this.remuxMake(s, n))) return null;
+    void this.remuxAfter(s, n);
+    return file;
+  }
+
+  /** Produce el segmento n; si ya se está produciendo (porque se adelantó) espera a esa misma ejecución. */
+  private remuxMake(s: Session, n: number): Promise<boolean> {
+    let job = s.jobs.get(n);
+    if (!job) {
+      job = this.remuxRun(s, n).finally(() => s.jobs.delete(n));
+      s.jobs.set(n, job);
+    }
+    return job;
+  }
+
+  private remuxRun(s: Session, n: number): Promise<boolean> {
+    const remux = s.params.remux!;
+    const final = path.join(s.dir, segmentName(n));
+    const tmp = `${final}.part`; // no se sirve hasta que está completo
+    const args = buildRemuxSegmentArgs({
+      input: s.params.input, bounds: remux.bounds, n, videoIdx: s.params.videoIdx, audioIdx: s.params.audioIdx, delay: remux.delay,
+    }, tmp);
+    return new Promise<boolean>((resolve) => {
+      const proc = spawn(this.o.ffmpegPath, args, { cwd: s.dir, stdio: ["ignore", "ignore", "pipe"], windowsHide: true });
+      s.procs.add(proc);
+      let stderr = "";
+      proc.stderr!.on("data", (d) => { stderr = (stderr + d).slice(-4000); });
+      const timer = setTimeout(() => proc.kill(), this.firstSegmentTimeoutMs);
+      let done = false;
+      const finish = async (code: number | null) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        s.procs.delete(proc);
+        if (code === 0 && !s.closed) {
+          try { await rename(tmp, final); return resolve(true); } catch { /* se trata como fallo */ }
+        }
+        await rm(tmp, { force: true }).catch(() => {});
+        if (!s.closed) {
+          this.log(`ffmpeg [copy] sesión ${s.id.slice(0, 8)} segmento ${n} falló (código ${code}): ${stderr.trim().split("\n").slice(-6).join(" | ")}`);
+          s.failed = true; // el reproductor recibe un 500 y pide la conversión completa
+        }
+        resolve(false);
+      };
+      proc.on("error", (e) => { stderr += String(e); void finish(-1); });
+      proc.on("exit", (code) => void finish(code));
+    });
+  }
+
+  private async remuxAfter(s: Session, n: number) {
+    for (let m = n + 1; m <= Math.min(s.total - 1, n + REMUX_PREFETCH); m++) {
+      if (s.closed || s.failed || s.jobs.size >= REMUX_MAX_PARALLEL) break;
+      if (!(await exists(path.join(s.dir, segmentName(m))))) void this.remuxMake(s, m);
+    }
+    await this.trim(s, n);
+  }
+
+  private async trim(s: Session, n: number) {
     // Liberar disco: se borran los segmentos ya vistos (si se retrocede, se regeneran).
     try {
       for (const f of await readdir(s.dir)) {

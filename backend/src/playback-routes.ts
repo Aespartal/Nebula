@@ -6,11 +6,14 @@ import type { Db } from "./db/index.js";
 import { decidePlayback } from "./ffmpeg/decide.js";
 import type { EncoderInfo } from "./ffmpeg/encoders.js";
 import type { HlsSessions } from "./ffmpeg/hls-sessions.js";
+import { KeyframeIndex, planSegments } from "./ffmpeg/keyframes.js";
 import { getStreams } from "./media-queries.js";
 
 const SEG_RE = /^seg_\d{5}\.ts$/;
+/** Cuánto se espera al índice de keyframes de un archivo nuevo antes de recodificar como siempre (el índice sigue calculándose). */
+const KEYFRAME_WAIT_MS = 8000;
 
-export function registerPlaybackRoutes(app: FastifyInstance, db: Db, hls: HlsSessions | null, enc: EncoderInfo, maxSessions: number, castAvailable = false) {
+export function registerPlaybackRoutes(app: FastifyInstance, db: Db, hls: HlsSessions | null, enc: EncoderInfo, maxSessions: number, castAvailable = false, keyframes: KeyframeIndex | null = null, keyframeWaitMs = KEYFRAME_WAIT_MS) {
   app.get("/api/system", async (): Promise<SystemInfo> => ({
     ffmpeg: enc.ffmpegVersion, nvenc: enc.nvenc, profiles: enc.profiles,
     maxSessions, activeSessions: hls?.activeCount ?? 0, castAvailable,
@@ -52,6 +55,20 @@ export function registerPlaybackRoutes(app: FastifyInstance, db: Db, hls: HlsSes
       if (!f.durationS || d.videoIdx === null) return reply.code(422).send({ error: "unknown_duration" });
 
       const video = getStreams(db, id).find((s) => s.idx === d.videoIdx);
+
+      if (d.mode === "remux" && keyframes) {
+        const kf = await keyframes.get(id, f.path, d.videoIdx, keyframeWaitMs);
+        const bounds = kf ? planSegments(kf.pts, f.durationS) : null;
+        if (kf && bounds) {
+          const session = await hls.create({
+            fileId: id, input: f.path, durationS: f.durationS, videoIdx: d.videoIdx, audioIdx: d.audioIdx,
+            sourceWidth: video?.width ?? null, sourceHeight: d.sourceHeight, maxHeight: 1080, remux: { bounds, delay: kf.delay },
+          });
+          return { mode: "remux", url: `/api/hls/${session.id}/index.m3u8`, sessionId: session.id, reasons: d.reasons, durationS: f.durationS };
+        }
+        // Sin índice a tiempo, o con tan pocos keyframes que no se puede cortar bien: se recodifica como siempre.
+      }
+
       const session = await hls.create({
         fileId: id, input: f.path, durationS: f.durationS, videoIdx: d.videoIdx, audioIdx: d.audioIdx,
         sourceWidth: video?.width ?? null, sourceHeight: d.sourceHeight,

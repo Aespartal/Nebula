@@ -13,6 +13,7 @@ const PROFILE: Record<string, string> = {
   "nvenc-gpu": "GPU NVIDIA (decodifica y codifica)",
   "nvenc-cpu-decode": "GPU NVIDIA (decodifica la CPU)",
   x264: "CPU (x264)",
+  copy: "Copia del vídeo (solo se convierte el audio)",
 };
 
 function Bar({ value, label }: { value: number; label: string }) {

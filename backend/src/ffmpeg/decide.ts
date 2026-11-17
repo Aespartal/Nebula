@@ -1,4 +1,4 @@
-import type { ClientCapabilities, DecisionReason, MediaStreamInfo } from "@nebula/shared";
+import type { ClientCapabilities, DecisionReason, DecisionReasonCode, MediaStreamInfo } from "@nebula/shared";
 
 export interface DecideInput {
   ext: string; // ".mkv"
@@ -11,7 +11,8 @@ export interface DecideInput {
 }
 
 export interface Decision {
-  mode: "direct" | "transcode" | "unplayable";
+  /** remux: el vídeo se copia y solo se convierte lo que sobra (contenedor, audio). transcode: se recodifica el vídeo. */
+  mode: "direct" | "remux" | "transcode" | "unplayable";
   reasons: DecisionReason[];
   videoIdx: number | null;
   audioIdx: number | null;
@@ -49,6 +50,10 @@ const CONTAINER_AUDIO: Record<Container, string[]> = {
 };
 
 const EIGHT_BIT = new Set(["yuv420p", "yuvj420p"]);
+
+// Qué se puede copiar tal cual a segmentos MPEG-TS de HLS (VP9 y AV1 no caben ahí) y qué problemas se arreglan sin tocar el vídeo.
+const REMUX_VIDEO = new Set(["h264", "hevc"]);
+const REMUX_FIXABLE = new Set<DecisionReasonCode>(["container", "audio_codec", "audio_track"]);
 
 /** El audio que un navegador reproduciría por defecto: la pista marcada o, si no, la primera. */
 export function defaultAudio(streams: MediaStreamInfo[]): MediaStreamInfo | undefined {
@@ -100,5 +105,13 @@ export function decidePlayback(i: DecideInput): Decision {
   if (i.caps.maxBitrate && i.bitrate && i.bitrate > i.caps.maxBitrate) reasons.push({ code: "bitrate" });
 
   if (reasons.length === 0) return { mode: "direct", reasons, ...base };
-  return { mode: i.caps.hls === "none" ? "unplayable" : "transcode", reasons, ...base };
+  if (i.caps.hls === "none") return { mode: "unplayable", reasons, ...base };
+
+  // El vídeo es válido para este navegador (códec admitido, 8 bits): solo falla la caja o el audio, y eso se arregla sin recodificar.
+  // Un `video_codec` aquí solo puede venir de una caja que no admite ese códec (avi, ts…), no del navegador.
+  const videoCopyable = !!vKey && !!i.caps.video[vKey] && REMUX_VIDEO.has(video.codec ?? "") && EIGHT_BIT.has(video.pixFmt ?? "");
+  const remuxable = videoCopyable && reasons.every((r) => REMUX_FIXABLE.has(r.code) || r.code === "video_codec");
+  // En remux el vídeo no es el problema: ese motivo vendría de la caja (ya listada como `container`) y sería engañoso.
+  if (remuxable) return { mode: "remux", reasons: reasons.filter((r) => r.code !== "video_codec"), ...base };
+  return { mode: "transcode", reasons, ...base };
 }

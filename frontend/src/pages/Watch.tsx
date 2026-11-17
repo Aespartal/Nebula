@@ -51,7 +51,7 @@ function WatchContent({ info }: { info: MediaFileInfo }) {
   const id = String(info.id);
   const [decision, setDecision] = useState<PlaybackDecision | null>(null);
   const [forceTranscode, setForceTranscode] = useState(false);
-  const [fellBack, setFellBack] = useState(false);
+  const [fellBack, setFellBack] = useState<"direct" | "remux" | null>(null);
   // Idioma de audio y subtítulos: se parte de lo que se eligió la última vez en este navegador.
   const [audioIdx, setAudioIdx] = useState<number | undefined>(() => pickAudio(info.streams, audioPref.get()));
   const tracks = useMemo(() => textSubtitles(info.streams), [info.streams]);
@@ -111,7 +111,7 @@ function WatchContent({ info }: { info: MediaFileInfo }) {
         fileId={info.id} audioIdx={audioIdx}
         forceTranscode={forceTranscode} setForceTranscode={setForceTranscode}
         onDecision={setDecision}
-        onDirectFailed={() => setFellBack(true)}
+        onDirectFailed={setFellBack}
         onEnded={() => nextRef.current?.focus()}
         startAt={resumeAt} videoRef={videoRef}
         subtitles={tracks} subtitleIdx={subtitleIdx}
@@ -159,7 +159,7 @@ function WatchContent({ info }: { info: MediaFileInfo }) {
       <details className="mt-8 border-t border-rule pt-3">
         <summary className="min-h-[var(--control-h)] py-2 font-bold">Detalles técnicos</summary>
         <PlaybackStatus decision={decision} forced={forceTranscode} fellBack={fellBack}
-          setForced={(v) => { setFellBack(false); setForceTranscode(v); }} />
+          setForced={(v) => { setFellBack(null); setForceTranscode(v); }} />
         <TechDetails info={info} />
       </details>
     </>
@@ -227,19 +227,23 @@ function SubtitlePicker({ streams, value, onChange, state, offset, onOffset }: {
   );
 }
 
-function PlaybackStatus({ decision, forced, fellBack, setForced }: { decision: PlaybackDecision | null; forced: boolean; fellBack: boolean; setForced: (v: boolean) => void }) {
+function PlaybackStatus({ decision, forced, fellBack, setForced }: { decision: PlaybackDecision | null; forced: boolean; fellBack: "direct" | "remux" | null; setForced: (v: boolean) => void }) {
   if (!decision) return null;
   const direct = decision.mode === "direct";
+  const remux = decision.mode === "remux";
   return (
     <div className="mt-2 max-w-2xl border-b border-rule pb-4">
-      <p className="font-bold">{direct ? "Reproducción directa" : `Convertido en el servidor (${decision.encoder === "nvenc" ? "GPU NVIDIA" : "CPU"})`}</p>
+      <p className="font-bold">
+        {direct ? "Reproducción directa" : remux ? "Sin recodificar el vídeo" : `Convertido en el servidor (${decision.encoder === "nvenc" ? "GPU NVIDIA" : "CPU"})`}
+      </p>
       {direct ? (
         <p className="text-muted">El archivo se envía tal cual, sin convertir.</p>
       ) : (
         <ul className="mt-1 list-disc pl-5 text-muted">
+          {remux && <li>La imagen no se toca: el servidor solo cambia el contenedor y convierte el audio, así que apenas gasta recursos.</li>}
           {decision.reasons.map((r) => (
             <li key={r.code}>
-              {r.code === "forced" && fellBack ? "El navegador no pudo reproducir el archivo en directo" : describeReason(r)}
+              {r.code === "forced" && fellBack ? (fellBack === "remux" ? "No se pudo reproducir sin recodificar el vídeo" : "El navegador no pudo reproducir el archivo en directo") : describeReason(r)}
             </li>
           ))}
         </ul>

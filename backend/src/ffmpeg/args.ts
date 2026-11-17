@@ -98,6 +98,60 @@ export function buildHlsArgs(job: HlsJob): string[] {
 
 export const segmentName = (n: number) => `seg_${String(n).padStart(5, "0")}.ts`;
 
+// --- Remux: el vídeo se copia tal cual y solo el audio se convierte. Cada segmento es una ejecución de FFmpeg ---
+
+export interface RemuxJob {
+  input: string;
+  /** Límites de segmento (segundos del archivo): el segmento n va de bounds[n] a bounds[n+1]. Cada uno es un keyframe, salvo el último (la duración). */
+  bounds: number[];
+  n: number;
+  videoIdx: number;
+  audioIdx: number | null;
+  /** Retardo dts→pts de los keyframes (B-frames), ver KeyframeData. */
+  delay: number;
+}
+
+/** Margen con el que se busca antes del keyframe: el demuxer salta a un punto anterior y `-copypriorss 0` descarta lo que sobre. */
+const SEEK_MARGIN_S = 0.02;
+/** FFmpeg corta `-t` por dts: se corta justo antes del dts del keyframe siguiente para no arrastrar sus primeros paquetes. */
+const CUT_GUARD_S = 0.001;
+
+/**
+ * Argumentos para producir UN segmento sin recodificar el vídeo. Las marcas de tiempo salen iguales a las del original
+ * (más el retardo fijo del muxer TS), así que segmentos de ejecuciones distintas encajan sin huecos ni solapes.
+ * Validado con FFmpeg real en remux.integration.test.ts: cámbialo solo con ese test delante.
+ */
+export function buildRemuxSegmentArgs(job: RemuxJob, output: string): string[] {
+  const b = job.bounds[job.n];
+  const last = job.n === job.bounds.length - 2;
+  const ss = Math.max(0, b - SEEK_MARGIN_S);
+  // En el primer keyframe del archivo el dts sale negativo y FFmpeg desplaza todo `delay` hacia delante. Para que el resto de
+  // segmentos (que no lo necesitan) queden en la misma línea de tiempo se les da ese mismo desplazamiento: pts = original + delay.
+
+  const a = ["-nostdin", "-hide_banner", "-loglevel", "warning", "-ss", ss.toFixed(3), "-i", job.input];
+  if (!last) a.push("-t", (job.bounds[job.n + 1] - job.delay - CUT_GUARD_S - ss).toFixed(3));
+  a.push("-map", `0:${job.videoIdx}`);
+  if (job.audioIdx !== null) a.push("-map", `0:${job.audioIdx}`);
+  a.push("-sn", "-dn", "-map_metadata", "-1", "-map_chapters", "-1", "-c:v", "copy", "-copypriorss:v", "0");
+  if (job.audioIdx !== null) {
+    a.push("-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000", "-af", "aresample=async=1:first_pts=0");
+  }
+  a.push("-max_muxing_queue_size", "2048", "-output_ts_offset", (ss + job.delay).toFixed(3), "-f", "mpegts", output);
+  return a;
+}
+
+/** Playlist VOD con la duración real de cada segmento (los cortes caen donde hay keyframes, no cada N segundos exactos). */
+export function buildRemuxPlaylist(bounds: number[]): string {
+  const lens = bounds.slice(1).map((e, i) => e - bounds[i]);
+  const lines = [
+    "#EXTM3U", "#EXT-X-VERSION:3", `#EXT-X-TARGETDURATION:${Math.ceil(Math.max(...lens))}`,
+    "#EXT-X-PLAYLIST-TYPE:VOD", "#EXT-X-MEDIA-SEQUENCE:0",
+  ];
+  lens.forEach((len, i) => lines.push(`#EXTINF:${Math.max(len, 0.001).toFixed(3)},`, segmentName(i)));
+  lines.push("#EXT-X-ENDLIST", "");
+  return lines.join("\n");
+}
+
 /** Playlist VOD completa y virtual: el reproductor ve la duración total y puede saltar a cualquier punto. */
 export function buildPlaylist(durationS: number, segDur: number): string {
   const total = segmentCount(durationS, segDur);

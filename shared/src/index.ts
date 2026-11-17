@@ -101,7 +101,8 @@ export interface PlaybackRequest {
 }
 
 export interface PlaybackDecision {
-  mode: "direct" | "transcode";
+  /** remux: se envía el vídeo sin recodificar (solo cambia la caja y el audio). */
+  mode: "direct" | "remux" | "transcode";
   url: string;
   sessionId?: string;
   reasons: DecisionReason[];

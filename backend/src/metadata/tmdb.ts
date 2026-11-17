@@ -13,6 +13,9 @@ export interface TmdbOptions {
 
 export interface MovieHit { id: number; title: string; originalTitle: string; year: number | null; overview: string | null; posterPath: string | null }
 export interface TvHit { id: number; name: string; originalName: string; year: number | null; overview: string | null; posterPath: string | null }
+/** Un resultado de TMDB tal cual, para que una persona elija (a diferencia de findMovie/findTv, que deciden solos). */
+export interface Candidate { tmdbId: number; title: string; originalTitle: string; year: number | null; overview: string | null; posterPath: string | null }
+
 export interface EpisodeInfo { number: number; name: string | null; overview: string | null }
 
 /** Minúsculas, sin acentos ni signos: «Amélie» y «amelie!» comparan igual. */
@@ -91,6 +94,28 @@ export class Tmdb {
     const best = pickMatch(hits, name, null);
     return best ?? (hits.length === 1 ? hits[0] : null); // una sola coincidencia: se acepta aunque el título cambie (p. ej. traducido)
   }
+
+  private movieCandidate = (r: any): Candidate => ({
+    tmdbId: Number(r.id), title: String(r.title ?? ""), originalTitle: String(r.original_title ?? ""),
+    year: yearOf(r.release_date), overview: str(r.overview), posterPath: str(r.poster_path),
+  });
+  private tvCandidate = (r: any): Candidate => ({
+    tmdbId: Number(r.id), title: String(r.name ?? ""), originalTitle: String(r.original_name ?? ""),
+    year: yearOf(r.first_air_date), overview: str(r.overview), posterPath: str(r.poster_path),
+  });
+
+  /** Hasta 10 resultados de búsqueda, en el orden de TMDB. */
+  async searchMovies(query: string, year: number | null): Promise<Candidate[]> {
+    const j = await this.get("/search/movie", { query, include_adult: "false", year: year ?? undefined });
+    return ((j?.results ?? []) as any[]).slice(0, 10).map(this.movieCandidate);
+  }
+  async searchTv(query: string): Promise<Candidate[]> {
+    const j = await this.get("/search/tv", { query, include_adult: "false" });
+    return ((j?.results ?? []) as any[]).slice(0, 10).map(this.tvCandidate);
+  }
+  /** Una película o serie por su id de TMDB. null si no existe. */
+  async movie(id: number): Promise<Candidate | null> { const j = await this.get(`/movie/${id}`, {}); return j ? this.movieCandidate(j) : null; }
+  async tv(id: number): Promise<Candidate | null> { const j = await this.get(`/tv/${id}`, {}); return j ? this.tvCandidate(j) : null; }
 
   async seasonEpisodes(tvId: number, season: number): Promise<EpisodeInfo[]> {
     const j = await this.get(`/tv/${tvId}/season/${season}`, {});

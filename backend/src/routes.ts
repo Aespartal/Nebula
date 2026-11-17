@@ -109,8 +109,8 @@ export function registerRoutes(app: FastifyInstance, db: Db, onScanned: () => vo
   );
 
   app.get<{ Params: { id: string } }>("/api/series/:id", async (req, reply): Promise<SeriesDetail | void> => {
-    const s = db.prepare("SELECT id,title,overview,poster_path IS NOT NULL AS hasPoster FROM series WHERE id=?").get(Number(req.params.id)) as
-      | { id: number; title: string; overview: string | null; hasPoster: number } | undefined;
+    const s = db.prepare("SELECT id,title,overview,poster_path IS NOT NULL AS hasPoster, tmdb_locked AS locked FROM series WHERE id=?").get(Number(req.params.id)) as
+      | { id: number; title: string; overview: string | null; hasPoster: number; locked: number } | undefined;
     if (!s) return reply.code(404).send({ error: "not_found" });
     const rows = db.prepare(`
       SELECT x.*, COALESCE(wp.watched,0) AS watched,
@@ -125,7 +125,7 @@ export function registerRoutes(app: FastifyInstance, db: Db, onScanned: () => vo
       if (!seasons.has(r.seasonId)) seasons.set(r.seasonId, { id: r.seasonId, number: r.seasonNumber, episodes: [] });
       seasons.get(r.seasonId)!.episodes.push({ id: r.episodeId, number: r.number, title: r.title, overview: r.overview, fileId: r.fileId, watched: !!r.watched, progress: r.progress });
     }
-    return { id: s.id, title: s.title, overview: s.overview, hasPoster: !!s.hasPoster, seasons: [...seasons.values()] };
+    return { id: s.id, title: s.title, overview: s.overview, hasPoster: !!s.hasPoster, metaLocked: !!s.locked, seasons: [...seasons.values()] };
   });
 
   // --- Archivos ---
@@ -134,6 +134,7 @@ export function registerRoutes(app: FastifyInstance, db: Db, onScanned: () => vo
       SELECT f.id, f.rel_path AS relPath, f.size_bytes AS sizeBytes, f.container,
              f.duration_s AS durationS, f.bitrate,
              m.id AS movieId, m.title AS movieTitle, m.year AS movieYear, m.overview AS movieOverview, m.poster_path AS moviePoster,
+             m.tmdb_locked AS movieLocked,
              s.poster_path AS seriesPoster, e.overview AS epOverview,
              e.number AS epNumber, e.title AS epTitle,
              se.number AS seasonNumber, s.id AS seriesId, s.title AS seriesTitle
@@ -176,6 +177,8 @@ export function registerRoutes(app: FastifyInstance, db: Db, onScanned: () => vo
         ? `${f.seriesTitle} · T${f.seasonNumber} E${f.epNumber}`
         : f.movieYear ? String(f.movieYear) : null,
       seriesId: f.seriesId ?? null,
+      movieId: isEpisode ? null : (f.movieId ?? null),
+      metaLocked: !isEpisode && !!f.movieLocked,
       next, previous,
       poster: isEpisode
         ? (f.seriesPoster ? `/api/posters/series/${f.seriesId}` : null)

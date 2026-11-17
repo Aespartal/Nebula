@@ -2,9 +2,11 @@ import { useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { SeriesDetail as SeriesDetailData } from "@nebula/shared";
 import { Button, LinkButton } from "../components/Button";
+import { FixMetadata } from "../components/FixMetadata";
 import { Icon } from "../components/Icon";
 import { ErrorBox, Loading } from "../components/States";
 import { plural } from "../lib/format";
+import { useUser } from "../lib/auth";
 import { useFocusWhen } from "../lib/useFocusWhen";
 import { usePageTitle } from "../lib/usePageTitle";
 import { sendJson, useApi } from "../lib/useApi";
@@ -33,6 +35,7 @@ export default function SeriesDetail() {
   const all = data?.seasons.flatMap((s) => s.episodes) ?? [];
   const allWatched = all.length > 0 && all.every((e) => e.watched);
   const go = data ? pickContinue(data) : null;
+  const isAdmin = useUser().role === "admin";
 
   async function mark(path: string, watched: boolean, done: string) {
     setBusy(true);
@@ -78,6 +81,7 @@ export default function SeriesDetail() {
             </Button>
           </div>
           <p role="status" className="mb-4 min-h-7 text-muted">{note}</p>
+          {isAdmin && <FixMetadata kind="series" id={data.id} title={data.title} locked={data.metaLocked} onChanged={reload} />}
 
           <div className="max-w-3xl">
             {data.seasons.map((season, i) => {

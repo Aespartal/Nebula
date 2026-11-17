@@ -38,6 +38,12 @@ async function mockTmdb() {
   app.get<{ Params: { id: string; n: string } }>("/tv/:id/season/:n", async (req) => ({
     episodes: [{ episode_number: 1, name: "Piloto", overview: "Walter empieza." }, { episode_number: 2, name: "El gato", overview: "Limpieza." }, { episode_number: 3, name: null, overview: "" }],
   }));
+  app.get<{ Params: { id: string } }>("/movie/:id", async (req, reply) =>
+    req.params.id === "335984" ? { id: 335984, title: "Blade Runner 2049", original_title: "Blade Runner 2049", release_date: "2017-10-04", overview: "K, un blade runner.", poster_path: "/br49.jpg" }
+    : req.params.id === "1" ? { id: 1, title: "Blade Runner", original_title: "Blade Runner", release_date: "1982-06-25", overview: "La vieja", poster_path: "/old.jpg" }
+    : reply.code(404).send({}));
+  app.get<{ Params: { id: string } }>("/tv/:id", async (req, reply) =>
+    req.params.id === "1396" ? { id: 1396, name: "Breaking Bad", original_name: "Breaking Bad", first_air_date: "2008-01-20", overview: "Un profesor de química.", poster_path: "/bb.jpg" } : reply.code(404).send({}));
   let imgHits = 0;
   app.get("/img/:size/:file", async (req, reply) => { imgHits++; return reply.type("image/jpeg").send(Buffer.from([0xff, 0xd8, 0xff, 0xd9])); });
   await app.listen({ port: 0, host: "127.0.0.1" });
@@ -195,4 +201,116 @@ test("rutas de metadatos: solo administradores; sin clave configurada avisa", as
   assert.equal((await app.inject({ method: "POST", url: "/api/metadata/refresh", headers: { cookie: user } })).statusCode, 403);
   assert.equal((await app.inject({ url: "/api/metadata/status", headers: { cookie: admin } })).json().enabled, false);
   assert.equal((await app.inject({ method: "POST", url: "/api/metadata/refresh", headers: { cookie: admin } })).statusCode, 409);
+});
+
+// --- Corrección manual (Fase 5) ---
+async function adminApp(db: Db, meta: MetadataService) {
+  const app = Fastify();
+  await registerAuth(app, db);
+  registerAuthRoutes(app, db);
+  registerMetadataRoutes(app, meta);
+  const setup = await app.inject({ method: "POST", url: "/api/auth/setup", payload: { username: "alex", password: "contraseña-larga" } });
+  const admin = `nebula_session=${setup.cookies[0].value}`;
+  await app.inject({ method: "POST", url: "/api/users", headers: { cookie: admin }, payload: { username: "mia", password: "otra-contraseña" } });
+  const l = await app.inject({ method: "POST", url: "/api/auth/login", payload: { username: "mia", password: "otra-contraseña" } });
+  return { app, admin: { cookie: admin }, user: { cookie: `nebula_session=${l.cookies[0].value}` } };
+}
+const locked = (db: Db, table: string, id: number) => (db.prepare(`SELECT tmdb_locked AS l FROM ${table} WHERE id=?`).get(id) as any).l;
+
+test("corrección manual: buscar candidatos, solo admin, validando la entrada", async () => {
+  const { mock, db, meta } = await mk();
+  const { app, admin, user } = await adminApp(db, meta);
+  const url = "/api/metadata/search?kind=movie&q=Blade%20Runner%202049";
+  assert.equal((await app.inject({ url, headers: user })).statusCode, 403);
+  const r = await app.inject({ url, headers: admin });
+  assert.equal(r.statusCode, 200);
+  assert.deepEqual(r.json().map((c: any) => [c.tmdbId, c.year]), [[1, 1982], [335984, 2017]]);
+  assert.equal(r.json()[1].posterPath, "/br49.jpg");
+  assert.equal((await app.inject({ url: "/api/metadata/search?kind=serie&q=x", headers: admin })).statusCode, 400);
+  assert.equal((await app.inject({ url: "/api/metadata/search?kind=movie&q=", headers: admin })).statusCode, 400);
+  assert.equal((await app.inject({ url: "/api/metadata/search?kind=movie&q=x&year=abc", headers: admin })).statusCode, 400);
+  assert.equal((await app.inject({ url: "/api/metadata/search?kind=series&q=Breaking%20Bad", headers: admin })).json()[0].tmdbId, 1396);
+  mock.failWith(401);
+  assert.equal((await app.inject({ url, headers: admin })).json().error, "tmdb_invalid_key");
+  mock.failWith(500);
+  const bad = await app.inject({ url, headers: admin });
+  assert.deepEqual([bad.statusCode, bad.json().error], [502, "tmdb_unavailable"]);
+  await mock.close();
+});
+
+test("corrección manual: la carátula del candidato solo acepta rutas de TMDB", async () => {
+  const { mock, db, meta } = await mk();
+  const { app, admin, user } = await adminApp(db, meta);
+  assert.equal((await app.inject({ url: "/api/metadata/candidate-poster?path=/br49abc.jpg", headers: user })).statusCode, 403);
+  const ok = await app.inject({ url: "/api/metadata/candidate-poster?path=/br49abc.jpg", headers: admin });
+  assert.deepEqual([ok.statusCode, ok.rawPayload.length], [200, 4]);
+  for (const p of ["http://evil.test/a.jpg", "/../../etc/passwd", "/a/b.jpg", "", "/x.jpg"]) {
+    assert.equal((await app.inject({ url: `/api/metadata/candidate-poster?path=${encodeURIComponent(p)}`, headers: admin })).statusCode, 400, p);
+  }
+  assert.ok(mock.calls.every((c) => !c.url.includes("evil")));
+  await mock.close();
+});
+
+test("corrección manual de una película: aplica los datos, la fija y el refresco forzado no la toca", async () => {
+  const { mock, db, meta } = await mk();
+  const { app, admin, user } = await adminApp(db, meta);
+  const put = (kind: string, id: number, tmdbId: unknown, h = admin) => app.inject({ method: "PUT", url: `/api/metadata/${kind}/${id}`, headers: h, payload: { tmdbId } });
+  assert.equal((await put("movie", 3, 335984, user)).statusCode, 403);
+  assert.equal((await put("movie", 3, 335984)).statusCode, 204);
+  const m = () => db.prepare("SELECT title, year, tmdb_id AS t, overview AS o, poster_path AS p, tmdb_locked AS l FROM movies WHERE id=3").get() as any;
+  assert.deepEqual(m(), { title: "Película inventada", year: 2001, t: 335984, o: "K, un blade runner.", p: "/br49.jpg", l: 1 }, "el título local no cambia");
+  await meta.refresh(true);
+  assert.equal(m().t, 335984, "force no pisa lo fijado");
+  assert.equal(meta.status().movies.pending, 0);
+  assert.equal((await put("movie", 3, 1)).statusCode, 204);
+  assert.equal(m().t, 1);
+  assert.equal((await put("movie", 3, null)).statusCode, 204);
+  assert.deepEqual([m().t, m().o, m().p, m().l], [null, null, null, 1]);
+  await meta.refresh(true);
+  assert.equal(m().t, null, "«ninguna» tampoco se busca sola");
+  assert.equal((await put("movie", 3, 999999)).json().error, "tmdb_not_found");
+  assert.equal((await put("movie", 99, 1)).statusCode, 404);
+  assert.equal((await put("otra", 3, 1)).statusCode, 404);
+  assert.equal((await put("movie", 3, "uno")).statusCode, 400);
+  assert.equal((await put("movie", 3, 0)).statusCode, 400);
+  mock.failWith(500);
+  assert.equal((await put("movie", 3, 1)).statusCode, 502);
+  assert.equal(m().t, null, "si TMDB falla no se cambia nada");
+  await mock.close();
+});
+
+test("corrección manual de una serie: vacía la sinopsis de episodios anterior, descarga la nueva y respeta el bloqueo", async () => {
+  const { mock, db, meta } = await mk();
+  const { app, admin } = await adminApp(db, meta);
+  db.prepare("UPDATE episodes SET overview='de otra serie' WHERE id=4").run();
+  assert.equal((await app.inject({ method: "PUT", url: "/api/metadata/series/2", headers: admin, payload: { tmdbId: 1396 } })).statusCode, 204);
+  await new Promise((r) => setTimeout(r, 300)); // kick() descarga los episodios en segundo plano
+  const s = db.prepare("SELECT tmdb_id AS t, poster_path AS p, tmdb_locked AS l FROM series WHERE id=2").get() as any;
+  assert.deepEqual(s, { t: 1396, p: "/bb.jpg", l: 1 });
+  assert.equal((db.prepare("SELECT overview AS o FROM episodes WHERE id=4").get() as any).o, "Walter empieza.");
+  await meta.refresh(true);
+  assert.equal((db.prepare("SELECT tmdb_id AS t FROM series WHERE id=2").get() as any).t, 1396);
+  await mock.close();
+});
+
+test("quitar el bloqueo devuelve la película al modo automático", async () => {
+  const { mock, db, meta } = await mk();
+  const { app, admin, user } = await adminApp(db, meta);
+  await app.inject({ method: "PUT", url: "/api/metadata/movie/1", headers: admin, payload: { tmdbId: 1 } });
+  assert.equal(locked(db, "movies", 1), 1);
+  assert.equal((await app.inject({ method: "DELETE", url: "/api/metadata/movie/1/lock", headers: user })).statusCode, 403);
+  assert.equal((await app.inject({ method: "DELETE", url: "/api/metadata/movie/1/lock", headers: admin })).statusCode, 204);
+  assert.equal(locked(db, "movies", 1), 0);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal((db.prepare("SELECT tmdb_id AS t FROM movies WHERE id=1").get() as any).t, 335984, "el refresco automático vuelve a decidir solo");
+  assert.equal((await app.inject({ method: "DELETE", url: "/api/metadata/movie/99/lock", headers: admin })).statusCode, 404);
+  await mock.close();
+});
+
+test("sin clave de TMDB, las rutas de corrección avisan con 409", async () => {
+  const db = openDb(":memory:");
+  const { app, admin } = await adminApp(db, new MetadataService(db, null, os.tmpdir()));
+  for (const [method, url] of [["GET", "/api/metadata/search?kind=movie&q=a"], ["PUT", "/api/metadata/movie/1"], ["GET", "/api/metadata/candidate-poster?path=/abcdef.jpg"]] as const) {
+    assert.equal((await app.inject({ method, url, headers: admin, payload: method === "PUT" ? { tmdbId: 1 } : undefined })).statusCode, 409, url);
+  }
 });

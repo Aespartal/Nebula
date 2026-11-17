@@ -7,6 +7,7 @@ import { Wordmark } from "../components/Layout";
 import { ErrorBox, Loading } from "../components/States";
 import { CastPanel } from "../components/CastPanel";
 import { NextUp } from "../components/NextUp";
+import { FixMetadata } from "../components/FixMetadata";
 import { SubtitleUpload } from "../components/SubtitleUpload";
 import { VideoPlayer, describeReason } from "../components/VideoPlayer";
 import { shouldAutoplay } from "../lib/autoplay";
@@ -193,6 +194,10 @@ function WatchContent({ info, onReload }: { info: MediaFileInfo; onReload: () =>
 
       {isAdmin && (
         <SubtitleUpload fileId={info.id} onUploaded={(r: SubtitleUploadResult) => { setPendingSub(r.idx); onReload(); }} />
+      )}
+      {isAdmin && info.movieId !== null && (
+        <FixMetadata kind="movie" id={info.movieId} title={info.title} year={info.subtitle && /^\d{4}$/.test(info.subtitle) ? Number(info.subtitle) : null}
+          locked={info.metaLocked} onChanged={onReload} />
       )}
 
       <details className="mt-8 border-t border-rule pt-3">

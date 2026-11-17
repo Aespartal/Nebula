@@ -141,6 +141,11 @@ export const migrations: string[] = [
     data TEXT NOT NULL
   );
   `,
+  // Fase 5: una película/serie corregida a mano se marca como fijada y el refresco automático de TMDB ya no la toca.
+  `
+  ALTER TABLE movies ADD COLUMN tmdb_locked INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE series ADD COLUMN tmdb_locked INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 export function migrate(db: Database.Database) {

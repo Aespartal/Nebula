@@ -105,6 +105,11 @@ Opcional. Con una clave gratuita de [TMDB](https://www.themoviedb.org/settings/a
 - `TMDB_API_KEY`: clave de API (v3) o token de acceso de lectura (v4). En Windows (cmd): `set TMDB_API_KEY=tu_clave`.
 - `TMDB_LANGUAGE`: idioma de los datos, por defecto `es-ES`.
 - A TMDB solo se envían título y año. Las carátulas se descargan una vez y se sirven desde Nebula.
+- Si Nebula se equivoca de película o serie, un administrador puede corregirlo en la ficha («Corregir carátula y sinopsis»): busca en TMDB, elige la correcta y queda **fijada**; el refresco automático no la toca. «Ninguna coincide» la deja sin ficha y «Volver al modo automático» quita la marca. El título y el año siguen siendo los del archivo.
+
+## Búsqueda
+
+El botón de la lupa de la cabecera (o `/` y Ctrl/⌘+K) busca a la vez en películas y series desde cualquier página. En Películas y Series esas teclas siguen enfocando el buscador de la propia página.
 - Estado y búsqueda manual: Ajustes → «Carátulas y sinopsis» (solo administradores).
 
 This product uses the TMDB API but is not endorsed or certified by TMDB.

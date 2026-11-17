@@ -9,7 +9,8 @@ export interface SeriesSummary { id: number; title: string; seasons: number; epi
 
 export interface EpisodeItem { id: number; number: number; title: string | null; overview: string | null; fileId: number; watched: boolean; progress: number }
 export interface SeasonItem { id: number; number: number; episodes: EpisodeItem[] }
-export interface SeriesDetail { id: number; title: string; overview: string | null; hasPoster: boolean; seasons: SeasonItem[] }
+/** `metaLocked`: los datos de TMDB se fijaron a mano y el refresco automático no los cambia. */
+export interface SeriesDetail { id: number; title: string; overview: string | null; hasPoster: boolean; metaLocked: boolean; seasons: SeasonItem[] }
 
 export interface MediaStreamInfo {
   idx: number;
@@ -38,6 +39,10 @@ export interface MediaFileInfo {
   /** Contexto corto bajo el título: "Breaking Bad · T1 E2" o el año de la película. */
   subtitle: string | null;
   seriesId: number | null;
+  /** Solo películas: su id, para corregir sus datos de TMDB. */
+  movieId: number | null;
+  /** Solo películas: los datos de TMDB se fijaron a mano. */
+  metaLocked: boolean;
   next: NextEpisode | null;
   /** Episodio anterior de la serie (para «pista anterior» de las teclas multimedia). */
   previous: NextEpisode | null;
@@ -53,6 +58,17 @@ export interface MediaFileInfo {
   overview: string | null;
   /** Estado de visionado del usuario actual. */
   resume: WatchProgress;
+}
+
+/** Una posible coincidencia de TMDB para corregir a mano. */
+export interface MetadataCandidate {
+  tmdbId: number;
+  title: string;
+  originalTitle: string;
+  year: number | null;
+  overview: string | null;
+  /** Ruta de la carátula en TMDB; se pide a Nebula con /api/metadata/candidate-poster?path=… (el navegador no habla con TMDB). */
+  posterPath: string | null;
 }
 
 export interface ScanStats { added: number; updated: number; unchanged: number; removed: number; skipped: number; failed: number }

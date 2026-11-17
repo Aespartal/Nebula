@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../lib/auth";
+import { GlobalSearch } from "./GlobalSearch";
 import { Icon, type IconName } from "./Icon";
 
 const ITEMS: { to: string; label: string; icon: IconName; end?: boolean }[] = [
@@ -63,6 +64,7 @@ export function Layout() {
             </nav>
           </div>
           <div className="flex items-center gap-3">
+            <GlobalSearch />
             <span className="flex items-center gap-2 text-meta text-muted" title="Sesión iniciada como">
               <span aria-hidden="true" className="flex size-7 items-center justify-center rounded-ctl border border-rule bg-raised font-mono text-label font-bold text-text">{initials}</span>
               <span className="hidden max-w-40 truncate text-soft sm:inline">{user?.username}</span>

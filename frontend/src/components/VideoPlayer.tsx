@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { DecisionReason, PlaybackDecision } from "@nebula/shared";
 import { detectCapabilities } from "../lib/capabilities";
+import { shiftCues, type CueOriginals } from "../lib/subtitleOffset";
 import type { SubtitleTrack } from "../lib/tracks";
 import { postJson, sendJson } from "../lib/useApi";
 import { Button } from "./Button";
@@ -46,11 +47,13 @@ interface Props {
   onSubtitleState?: (s: "loading" | "ready" | "error") => void;
   /** El usuario cambió el subtítulo desde el menú del propio reproductor. */
   onSubtitleChange?: (idx: number | null) => void;
+  /** Desfase en segundos de los subtítulos mostrados (+ = más tarde). */
+  subtitleOffset?: number;
 }
 
 const SAVE_EVERY_MS = 10_000;
 
-export function VideoPlayer({ fileId, audioIdx, forceTranscode, setForceTranscode, onDecision, onEnded, onDirectFailed, startAt = 0, videoRef: outerRef, subtitles = [], subtitleIdx = null, onSubtitleState, onSubtitleChange }: Props) {
+export function VideoPlayer({ fileId, audioIdx, forceTranscode, setForceTranscode, onDecision, onEnded, onDirectFailed, startAt = 0, videoRef: outerRef, subtitles = [], subtitleIdx = null, onSubtitleState, onSubtitleChange, subtitleOffset = 0 }: Props) {
   const ownRef = useRef<HTMLVideoElement>(null);
   const videoRef = outerRef ?? ownRef;
   const lastSaveRef = useRef(0);
@@ -61,11 +64,18 @@ export function VideoPlayer({ fileId, audioIdx, forceTranscode, setForceTranscod
   const [busy, setBusy] = useState(true);
   const [mode, setMode] = useState<"direct" | "transcode" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const cb = useRef({ onDecision, onEnded, onDirectFailed, onSubtitleState, onSubtitleChange, subtitleIdx });
-  cb.current = { onDecision, onEnded, onDirectFailed, onSubtitleState, onSubtitleChange, subtitleIdx };
+  const cb = useRef({ onDecision, onEnded, onDirectFailed, onSubtitleState, onSubtitleChange, subtitleIdx, subtitleOffset });
+  cb.current = { onDecision, onEnded, onDirectFailed, onSubtitleState, onSubtitleChange, subtitleIdx, subtitleOffset };
 
   // --- Subtítulos: una pista <track> por subtítulo; solo se descarga la que se muestra. ---
   const trackEls = useRef(new Map<number, HTMLTrackElement>());
+  // Tiempos originales de cada línea: el desfase se aplica siempre sobre ellos, nunca sobre lo ya desplazado.
+  const cueOriginals = useRef<CueOriginals>(new WeakMap());
+  const applyOffset = (idx: number) => {
+    const cues = trackEls.current.get(idx)?.track.cues; // null hasta que la pista termina de cargar
+    if (cues) shiftCues(cues, cb.current.subtitleOffset, cueOriginals.current);
+  };
+  useEffect(() => { if (subtitleIdx !== null) applyOffset(subtitleIdx); }, [subtitleOffset, subtitleIdx, subtitles]);
   useEffect(() => {
     for (const [idx, el] of trackEls.current) {
       const want = idx === subtitleIdx ? "showing" : "disabled";
@@ -91,7 +101,7 @@ export function VideoPlayer({ fileId, audioIdx, forceTranscode, setForceTranscod
   const trackRef = (idx: number) => (el: HTMLTrackElement | null) => {
     if (!el) { trackEls.current.delete(idx); return; }
     trackEls.current.set(idx, el);
-    const ok = () => { if (cb.current.subtitleIdx === idx) cb.current.onSubtitleState?.("ready"); };
+    const ok = () => { if (cb.current.subtitleIdx === idx) { applyOffset(idx); cb.current.onSubtitleState?.("ready"); } };
     const bad = () => { if (cb.current.subtitleIdx === idx) cb.current.onSubtitleState?.("error"); };
     el.addEventListener("load", ok); el.addEventListener("error", bad);
     return () => { el.removeEventListener("load", ok); el.removeEventListener("error", bad); trackEls.current.delete(idx); };

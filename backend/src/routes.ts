@@ -2,13 +2,14 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import type {
-  Library, MediaFileInfo, MovieSummary, NextEpisode, ScanStats, SeriesDetail, SeriesSummary,
+  Library, MediaFileInfo, MovieSummary, NextEpisode, RecentItem, ScanStats, SeriesDetail, SeriesSummary,
 } from "@nebula/shared";
 import type { Db } from "./db/index.js";
 import { requireAdmin } from "./auth/plugin.js";
 import { getStreams } from "./media-queries.js";
 import { unsafeLibraryRoot } from "./library-paths.js";
-import { getProgress } from "./progress.js";
+import { MIN_RESUME_S, getProgress } from "./progress.js";
+import { recentlyAdded } from "./recent.js";
 import { scanLibrary, type LibraryRow } from "./scanner.js";
 import { sendRanged } from "./stream.js";
 
@@ -80,26 +81,31 @@ export function registerRoutes(app: FastifyInstance, db: Db, onScanned: () => vo
   // --- Catálogo ---
   app.get("/api/movies", async (req): Promise<MovieSummary[]> => {
     const rows = db.prepare(`
-      SELECT x.id, x.title, x.year, x.fileId, x.hasPoster, COALESCE(wp.watched,0) AS watched,
+      SELECT x.id, x.title, x.year, x.fileId, x.hasPoster, x.addedAt, COALESCE(wp.watched,0) AS watched,
              CASE WHEN wp.duration_s > 0 THEN MIN(1.0, wp.position_s / wp.duration_s) ELSE 0 END AS progress
-      FROM (SELECT m.id, m.title, m.year, m.poster_path IS NOT NULL AS hasPoster, MIN(f.id) AS fileId
+      FROM (SELECT m.id, m.title, m.year, m.poster_path IS NOT NULL AS hasPoster, MIN(f.id) AS fileId,
+                   MAX(COALESCE(f.added_at, f.mtime_ms)) AS addedAt
             FROM movies m JOIN media_files f ON f.movie_id = m.id GROUP BY m.id) x
       LEFT JOIN watch_progress wp ON wp.file_id = x.fileId AND wp.user_id = ?
       ORDER BY x.title COLLATE NOCASE`).all(req.user!.id) as any[];
     return rows.map((r) => ({ ...r, watched: !!r.watched, hasPoster: !!r.hasPoster }));
   });
 
+  app.get("/api/recent", async (): Promise<RecentItem[]> => recentlyAdded(db));
+
   app.get("/api/series", async (req): Promise<SeriesSummary[]> =>
     db.prepare(`
       SELECT s.id, s.title, s.poster_path IS NOT NULL AS hasPoster,
              COUNT(DISTINCT se.id) AS seasons, COUNT(DISTINCT e.id) AS episodes,
-             COUNT(DISTINCT CASE WHEN wp.watched = 1 THEN e.id END) AS watchedEpisodes
+             COUNT(DISTINCT CASE WHEN wp.watched = 1 THEN e.id END) AS watchedEpisodes,
+             COUNT(DISTINCT CASE WHEN wp.watched = 1 OR wp.position_s >= ? THEN e.id END) AS startedEpisodes,
+             COALESCE(MAX(COALESCE(f.added_at, f.mtime_ms)), 0) AS addedAt
       FROM series s
       JOIN seasons se ON se.series_id = s.id
       JOIN episodes e ON e.season_id = se.id
       LEFT JOIN media_files f ON f.episode_id = e.id
       LEFT JOIN watch_progress wp ON wp.file_id = f.id AND wp.user_id = ?
-      GROUP BY s.id ORDER BY s.title COLLATE NOCASE`).all(req.user!.id).map((r: any) => ({ ...r, hasPoster: !!r.hasPoster })) as SeriesSummary[],
+      GROUP BY s.id ORDER BY s.title COLLATE NOCASE`).all(MIN_RESUME_S, req.user!.id).map((r: any) => ({ ...r, hasPoster: !!r.hasPoster })) as SeriesSummary[],
   );
 
   app.get<{ Params: { id: string } }>("/api/series/:id", async (req, reply): Promise<SeriesDetail | void> => {
@@ -127,7 +133,8 @@ export function registerRoutes(app: FastifyInstance, db: Db, onScanned: () => vo
     const f = db.prepare(`
       SELECT f.id, f.rel_path AS relPath, f.size_bytes AS sizeBytes, f.container,
              f.duration_s AS durationS, f.bitrate,
-             m.title AS movieTitle, m.year AS movieYear, m.overview AS movieOverview, e.overview AS epOverview,
+             m.id AS movieId, m.title AS movieTitle, m.year AS movieYear, m.overview AS movieOverview, m.poster_path AS moviePoster,
+             s.poster_path AS seriesPoster, e.overview AS epOverview,
              e.number AS epNumber, e.title AS epTitle,
              se.number AS seasonNumber, s.id AS seriesId, s.title AS seriesTitle
       FROM media_files f
@@ -140,16 +147,23 @@ export function registerRoutes(app: FastifyInstance, db: Db, onScanned: () => vo
 
     const isEpisode = f.epNumber !== null;
     let next: NextEpisode | null = null;
+    let previous: NextEpisode | null = null;
     if (isEpisode) {
-      const n = db.prepare(`
-        SELECT se2.number AS sn, e2.number AS en, e2.title, MIN(f2.id) AS fileId
-        FROM episodes e2
-        JOIN seasons se2 ON se2.id = e2.season_id
-        JOIN media_files f2 ON f2.episode_id = e2.id
-        WHERE se2.series_id = ? AND (se2.number > ? OR (se2.number = ? AND e2.number > ?))
-        GROUP BY e2.id ORDER BY se2.number, e2.number LIMIT 1`)
-        .get(f.seriesId, f.seasonNumber, f.seasonNumber, f.epNumber) as any;
-      if (n) next = { fileId: n.fileId, label: `T${n.sn} E${n.en}${n.title ? ` · ${n.title}` : ""}` };
+      // El episodio contiguo con archivo, hacia delante (">" y orden ascendente) o hacia atrás ("<" y descendente).
+      const adjacent = (dir: "next" | "previous"): NextEpisode | null => {
+        const fwd = dir === "next";
+        const n = db.prepare(`
+          SELECT se2.number AS sn, e2.number AS en, e2.title, MIN(f2.id) AS fileId
+          FROM episodes e2
+          JOIN seasons se2 ON se2.id = e2.season_id
+          JOIN media_files f2 ON f2.episode_id = e2.id
+          WHERE se2.series_id = ? AND (se2.number ${fwd ? ">" : "<"} ? OR (se2.number = ? AND e2.number ${fwd ? ">" : "<"} ?))
+          GROUP BY e2.id ORDER BY se2.number ${fwd ? "" : "DESC"}, e2.number ${fwd ? "" : "DESC"} LIMIT 1`)
+          .get(f.seriesId, f.seasonNumber, f.seasonNumber, f.epNumber) as any;
+        return n ? { fileId: n.fileId, label: `T${n.sn} E${n.en}${n.title ? ` · ${n.title}` : ""}` } : null;
+      };
+      next = adjacent("next");
+      previous = adjacent("previous");
     }
 
     const streams = getStreams(db, f.id);
@@ -162,7 +176,10 @@ export function registerRoutes(app: FastifyInstance, db: Db, onScanned: () => vo
         ? `${f.seriesTitle} · T${f.seasonNumber} E${f.epNumber}`
         : f.movieYear ? String(f.movieYear) : null,
       seriesId: f.seriesId ?? null,
-      next,
+      next, previous,
+      poster: isEpisode
+        ? (f.seriesPoster ? `/api/posters/series/${f.seriesId}` : null)
+        : (f.moviePoster ? `/api/posters/movie/${f.movieId}` : null),
       relPath: f.relPath, sizeBytes: f.sizeBytes, container: f.container,
       durationS: f.durationS, bitrate: f.bitrate, streams,
       overview: (isEpisode ? f.epOverview : f.movieOverview) ?? null,

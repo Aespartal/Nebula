@@ -109,6 +109,12 @@ const migrations: string[] = [
     library_id INTEGER REFERENCES libraries(id) ON DELETE SET NULL
   );
   `,
+  `
+  -- Cuándo conoció Nebula cada archivo (para «Recién añadidos»). Lo que ya había se aproxima con la fecha del archivo.
+  ALTER TABLE media_files ADD COLUMN added_at INTEGER;
+  UPDATE media_files SET added_at = mtime_ms;
+  CREATE INDEX idx_media_files_added ON media_files(added_at DESC);
+  `,
 ];
 
 export function migrate(db: Database.Database) {

@@ -80,3 +80,26 @@ test("detección de contenedor por extensión en matroska/webm", () => {
   assert.equal(containerOf(".mkv", "matroska,webm"), "mkv");
   assert.equal(containerOf(".mp4", "mov,mp4,m4a,3gp,3g2,mj2"), "mp4");
 });
+
+// Casos de caracterización (comportamiento actual): fijan qué combinaciones de motivos
+// aparecen hoy en los escenarios donde un modo remux (-c:v copy) tendría sentido.
+const mkv = { ext: ".mkv", container: "matroska,webm" };
+
+test("mkv H.264 8 bits + AC3: hoy convierte solo por contenedor y audio (candidato a remux)", () => {
+  const d = run({ ...mkv, streams: [v(), a({ codec: "ac3" })] });
+  assert.equal(d.mode, "transcode");
+  assert.deepEqual(codes(d), ["container", "audio_codec"]);
+});
+test("mkv H.264 + AAC con segunda pista de audio: contenedor y pista (candidato a remux)", () => {
+  const streams = [v(), a({ idx: 1, language: "spa" }), a({ idx: 2, language: "eng", isDefault: false })];
+  const d = run({ ...mkv, streams, audioStreamIdx: 2 });
+  assert.deepEqual(codes(d), ["container", "audio_track"]);
+});
+test("mkv HEVC 10 bits + AC3: hay motivo de vídeo, no es candidato a remux", () => {
+  const d = run({ ...mkv, streams: [v({ codec: "hevc", profile: "Main 10", pixFmt: "yuv420p10le" }), a({ codec: "ac3" })] });
+  assert.deepEqual(codes(d), ["container", "video_codec", "audio_codec"]);
+});
+test("mkv H.264 + AC3 por encima del bitrate del cliente: el bitrate se suma a los motivos", () => {
+  const d = run({ ...mkv, streams: [v(), a({ codec: "ac3" })], caps: { ...chrome, maxBitrate: 2_000_000 } });
+  assert.deepEqual(codes(d), ["container", "audio_codec", "bitrate"]);
+});

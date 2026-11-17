@@ -77,8 +77,8 @@ function createStatements(db: Db) {
     findEpisode: db.prepare("SELECT id FROM episodes WHERE season_id=? AND number=?"),
     insertEpisode: db.prepare("INSERT INTO episodes(season_id,number,title) VALUES(?,?,?)"),
     upsertFile: db.prepare(`
-      INSERT INTO media_files(library_id,movie_id,episode_id,path,rel_path,size_bytes,mtime_ms,container,duration_s,bitrate)
-      VALUES(@library_id,@movie_id,@episode_id,@path,@rel_path,@size_bytes,@mtime_ms,@container,@duration_s,@bitrate)
+      INSERT INTO media_files(library_id,movie_id,episode_id,path,rel_path,size_bytes,mtime_ms,container,duration_s,bitrate,added_at)
+      VALUES(@library_id,@movie_id,@episode_id,@path,@rel_path,@size_bytes,@mtime_ms,@container,@duration_s,@bitrate,@added_at)
       ON CONFLICT(path) DO UPDATE SET movie_id=excluded.movie_id, episode_id=excluded.episode_id,
         rel_path=excluded.rel_path, size_bytes=excluded.size_bytes, mtime_ms=excluded.mtime_ms,
         container=excluded.container, duration_s=excluded.duration_s, bitrate=excluded.bitrate
@@ -213,6 +213,7 @@ async function doScan(db: Db, lib: LibraryRow): Promise<ScanStats> {
         library_id: lib.id, ...ent, path: t.file, rel_path: relPath,
         size_bytes: t.size, mtime_ms: t.mtimeMs,
         container: probed.container, duration_s: probed.durationS, bitrate: probed.bitrate,
+        added_at: Date.now(), // solo cuenta al insertar: el UPDATE de un archivo ya conocido no lo cambia
       }) as { id: number };
       st.deleteStreams.run(row.id);
       const base = { file_id: row.id, profile: null, pix_fmt: null, width: null, height: null, channels: null, external_path: null };

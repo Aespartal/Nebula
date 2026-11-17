@@ -31,6 +31,13 @@ Variables: `PORT`, `HOST` (por defecto `127.0.0.1`; `0.0.0.0` para la red local)
 - **Cabeceras**: política de contenido estricta (CSP), `nosniff`, sin incrustación en otras webs (`frame-ancestors 'none'`), `Referrer-Policy: no-referrer` y HSTS cuando la conexión es HTTPS.
 - Si pierdes la contraseña del único administrador: borra la fila de `users` de `data/nebula.db` y vuelve a abrir Nebula para repetir el alta.
 
+## Catálogo y uso diario
+
+- **Inicio**: «Seguir viendo» y, debajo, «Recién añadidos» con lo último que ha entrado en la biblioteca (películas, y series con sus episodios nuevos agrupados: una descarga de 8 episodios es una sola entrada). La fecha es la de la primera vez que Nebula vio el archivo; lo que ya estaba antes de actualizar se ordena por la fecha del archivo.
+- **Películas y Series**: filtra por estado (Todas · Pendientes · En curso · Vistas, con su recuento) y ordena por título, año (solo películas) o añadido recientemente. La elección va en la dirección (`?estado=vistas&orden=reciente`), así que se conserva al recargar y se puede enlazar. En una serie, «En curso» es que tiene algún episodio visto o empezado.
+- **Instalar como aplicación**: desde el menú de Chrome, Edge o Android («Instalar Nebula» o «Añadir a pantalla de inicio», según el navegador); en iPhone y iPad, Compartir → «Añadir a pantalla de inicio». Se abre sin barra de direcciones. Los navegadores solo la ofrecen por HTTPS (o en `localhost`), así que desde fuera de casa hace falta [publicarla con HTTPS](#publicar-en-internet). No funciona sin conexión.
+- **Teclas multimedia**: play/pausa, ±10 s y siguiente/anterior episodio desde el teclado, los auriculares o la pantalla de bloqueo del móvil, con el título y la carátula. «Anterior» reinicia el episodio si ya han pasado 5 s.
+
 ## Reproducción y conversión
 
 El navegador informa de lo que sabe reproducir y el servidor decide:
@@ -86,6 +93,7 @@ Nebula controla un qBittorrent instalado **en el mismo equipo** (decisiones y pl
 
 - Subtítulos de texto (SRT, ASS/SSA, mov_text, WebVTT), incrustados o en archivos externos junto al vídeo, se convierten a WebVTT al vuelo y se guardan en caché. Los de imagen (PGS, DVD) no se pueden mostrar en el navegador y aparecen desactivados.
 - En el reproductor eliges subtítulo y pista de audio; Nebula recuerda tu idioma preferido en ese navegador.
+- **Sincronía**: si un subtítulo sale antes o después, ajústalo en pasos de 0,5 s (hasta ±60 s) con «−0,5 s» y «+0,5 s» bajo el selector. Se aplica al instante en el navegador, sin tocar el archivo, y se recuerda para ese vídeo y esa pista.
 
 ## Carátulas y sinopsis (TMDB)
 

@@ -53,3 +53,18 @@ export function formatEta(seconds: number | null): string {
   const h = Math.floor(m / 60);
   return `${h} h ${m % 60} min`;
 }
+
+/** «ahora», «hace 5 min», «hace 3 h», «hace 2 d», «hace 4 meses»: cuándo entró algo en el catálogo. */
+export function formatAgo(ms: number, now = Date.now()): string {
+  const min = Math.floor((now - ms) / 60000);
+  if (min < 1) return "ahora";
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `hace ${h} h`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `hace ${d} d`;
+  const mo = Math.floor(d / 30);
+  if (mo < 12) return `hace ${mo} ${mo === 1 ? "mes" : "meses"}`;
+  const y = Math.max(1, Math.floor(d / 365));
+  return `hace ${y} ${y === 1 ? "año" : "años"}`;
+}

@@ -1,10 +1,10 @@
-import type { ContinueItem } from "@nebula/shared";
+import type { ContinueItem, RecentItem } from "@nebula/shared";
 import { LinkButton } from "../components/Button";
 import { Icon } from "../components/Icon";
 import { PageHeading } from "../components/PageHeading";
 import { ErrorBox, Loading } from "../components/States";
 import { TitleCard } from "../components/TitleCard";
-import { formatClock } from "../lib/format";
+import { formatAgo, formatClock, plural } from "../lib/format";
 import { useApi } from "../lib/useApi";
 import { usePageTitle } from "../lib/usePageTitle";
 
@@ -39,9 +39,34 @@ function Hero({ item }: { item: ContinueItem }) {
   );
 }
 
+const GRID = "grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6";
+
+/** Lo último que ha entrado en el catálogo; útil sobre todo cuando acaba una descarga. */
+function Recent({ items, spaced }: { items: RecentItem[]; spaced: boolean }) {
+  return (
+    <section aria-labelledby="recientes" className={spaced ? "mt-10" : undefined}>
+      <h2 id="recientes" className="label mb-4">Recién añadidos</h2>
+      <ul className={GRID}>
+        {items.map((i) => (
+          <li key={`${i.kind}-${i.id}`}>
+            <TitleCard
+              to={i.kind === "movie" ? `/ver/${i.fileId}` : `/series/${i.id}`}
+              title={i.title} kind={i.kind === "movie" ? "Película" : "Serie"} poster={i.poster}
+              meta={i.kind === "series" ? plural(i.newEpisodes, "episodio nuevo", "episodios nuevos") : i.year ? String(i.year) : "Sin año"}
+              aside={formatAgo(i.addedAt)}
+            />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export default function Home() {
   usePageTitle("Inicio");
   const { data, error, loading, reload } = useApi<ContinueItem[]>("/api/continue");
+  // Las novedades son un extra: si fallan, la portada sigue funcionando sin ellas.
+  const recent = useApi<RecentItem[]>("/api/recent").data ?? [];
   const [first, ...rest] = data ?? [];
 
   return (
@@ -61,7 +86,7 @@ export default function Home() {
                 <h2 className="label">Más para retomar</h2>
                 <span className="font-mono text-label text-faint tabular">{rest.length} en curso</span>
               </div>
-              <ul className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+              <ul className={GRID}>
                 {rest.map((i) => (
                   <li key={i.fileId}>
                     <TitleCard
@@ -76,7 +101,8 @@ export default function Home() {
           )}
         </section>
       )}
-      {data && data.length === 0 && (
+      {recent.length > 0 && <Recent items={recent} spaced={!!first} />}
+      {data && data.length === 0 && recent.length === 0 && (
         <div className="max-w-2xl">
           <p className="text-lg">Aquí aparecerá lo que dejes a medias y el siguiente capítulo de las series que estés viendo.</p>
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">

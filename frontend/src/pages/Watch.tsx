@@ -1,5 +1,5 @@
 import { useId, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import type { MediaFileInfo, MediaStreamInfo, PlaybackDecision, SystemInfo } from "@nebula/shared";
 import { Button, LinkButton } from "../components/Button";
 import { Icon } from "../components/Icon";
@@ -9,9 +9,11 @@ import { CastPanel } from "../components/CastPanel";
 import { VideoPlayer, describeReason } from "../components/VideoPlayer";
 import { formatClock, formatDuration, formatSize, plural } from "../lib/format";
 import { languageName, normalizeLang } from "../lib/lang";
-import { audioPref, subtitlePref } from "../lib/prefs";
+import { audioPref, subtitleOffsetPref, subtitlePref } from "../lib/prefs";
+import { OFFSET_STEP_S, clampOffset, formatOffset } from "../lib/subtitleOffset";
 import { pickAudio, pickSubtitle, subtitleLabel, textSubtitles } from "../lib/tracks";
 import { useFocusWhen } from "../lib/useFocusWhen";
+import { useMediaSession } from "../lib/useMediaSession";
 import { usePageTitle } from "../lib/usePageTitle";
 import { sendJson, useApi } from "../lib/useApi";
 
@@ -55,6 +57,15 @@ function WatchContent({ info }: { info: MediaFileInfo }) {
   const tracks = useMemo(() => textSubtitles(info.streams), [info.streams]);
   const [subtitleIdx, setSubtitleIdx] = useState<number | null>(() => pickSubtitle(tracks, subtitlePref.get()));
   const [subState, setSubState] = useState<"loading" | "ready" | "error" | null>(null);
+  // Desfase por pista (se lee de lo guardado la primera vez que se muestra esa pista).
+  const [offsets, setOffsets] = useState<Record<number, number>>({});
+  const subtitleOffset = subtitleIdx === null ? 0 : (offsets[subtitleIdx] ?? subtitleOffsetPref.get(info.id, subtitleIdx));
+  function changeOffset(seconds: number) {
+    if (subtitleIdx === null) return;
+    const v = clampOffset(seconds);
+    subtitleOffsetPref.set(info.id, subtitleIdx, v);
+    setOffsets((o) => ({ ...o, [subtitleIdx]: v }));
+  }
   const nextRef = useRef<HTMLAnchorElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [startedOver, setStartedOver] = useState(false);
@@ -62,6 +73,13 @@ function WatchContent({ info }: { info: MediaFileInfo }) {
   const h1 = useRef<HTMLHeadingElement>(null);
   const system = useApi<SystemInfo>("/api/system");
   useFocusWhen(h1, true);
+
+  // Teclas multimedia, auriculares y pantalla de bloqueo. Al cambiar de episodio la página se vuelve a montar.
+  const navigate = useNavigate();
+  useMediaSession(videoRef, { title: info.title, subtitle: info.subtitle, poster: info.poster }, {
+    onNext: info.next ? () => navigate(`/ver/${info.next!.fileId}`) : undefined,
+    onPrevious: info.previous ? () => navigate(`/ver/${info.previous!.fileId}`) : undefined,
+  });
 
   // Se retoma solo si había avanzado algo y aún no estaba casi al final.
   const resumeAt = info.resume.positionS >= 10 &&
@@ -97,7 +115,7 @@ function WatchContent({ info }: { info: MediaFileInfo }) {
         onEnded={() => nextRef.current?.focus()}
         startAt={resumeAt} videoRef={videoRef}
         subtitles={tracks} subtitleIdx={subtitleIdx}
-        onSubtitleState={setSubState} onSubtitleChange={chooseSubtitle}
+        onSubtitleState={setSubState} onSubtitleChange={chooseSubtitle} subtitleOffset={subtitleOffset}
       />
       {system.data?.castAvailable && <CastPanel fileId={info.id} title={info.title} audioIdx={audioIdx} videoRef={videoRef} />}
 
@@ -134,7 +152,8 @@ function WatchContent({ info }: { info: MediaFileInfo }) {
 
       <div className="mt-6 grid max-w-2xl gap-5 sm:grid-cols-2">
         <AudioPicker streams={info.streams} value={audioIdx} onChange={chooseAudio} />
-        <SubtitlePicker streams={info.streams} value={subtitleIdx} onChange={chooseSubtitle} state={subState} />
+        <SubtitlePicker streams={info.streams} value={subtitleIdx} onChange={chooseSubtitle} state={subState}
+          offset={subtitleOffset} onOffset={changeOffset} />
       </div>
 
       <details className="mt-8 border-t border-rule pt-3">
@@ -167,8 +186,9 @@ function AudioPicker({ streams, value, onChange }: { streams: MediaStreamInfo[];
 
 const selectCls = "field";
 
-function SubtitlePicker({ streams, value, onChange, state }: {
+function SubtitlePicker({ streams, value, onChange, state, offset, onOffset }: {
   streams: MediaStreamInfo[]; value: number | null; onChange: (v: number | null) => void; state: "loading" | "ready" | "error" | null;
+  offset: number; onOffset: (seconds: number) => void;
 }) {
   const id = useId();
   const subs = streams.filter((s) => s.kind === "subtitle");
@@ -185,6 +205,24 @@ function SubtitlePicker({ streams, value, onChange, state }: {
         {value !== null && state === "loading" && "Cargando subtítulos… En un archivo grande puede tardar un poco la primera vez."}
         {value !== null && state === "error" && "No se pudieron cargar estos subtítulos."}
       </p>
+      {value !== null && state !== "error" && (
+        <div role="group" aria-labelledby={`${id}-sync`}>
+          <span id={`${id}-sync`} className="label mb-1.5 block">Sincronía</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="secondary" className="px-3 font-mono" onClick={() => onOffset(offset - OFFSET_STEP_S)}
+              aria-label="Adelantar los subtítulos 0,5 segundos (salen antes)">−0,5 s</Button>
+            <output aria-live="polite" aria-label={offset === 0 ? "Subtítulos sin ajuste" : `Subtítulos ajustados ${formatOffset(offset)}`}
+              className="min-w-16 text-center font-mono text-meta font-bold tabular">{formatOffset(offset)}</output>
+            <Button variant="secondary" className="px-3 font-mono" onClick={() => onOffset(offset + OFFSET_STEP_S)}
+              aria-label="Retrasar los subtítulos 0,5 segundos (salen después)">+0,5 s</Button>
+            {offset !== 0 && (
+              <button type="button" className="min-h-[var(--control-h)] px-2 text-meta font-bold text-text underline underline-offset-4"
+                onClick={() => onOffset(0)}>Restablecer</button>
+            )}
+          </div>
+          <p className="mt-1 text-muted">Si salen tarde, pulsa −0,5 s. Se recuerda para este vídeo.</p>
+        </div>
+      )}
     </div>
   );
 }

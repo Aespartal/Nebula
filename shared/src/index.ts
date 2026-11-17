@@ -2,9 +2,10 @@ export type LibraryType = "movies" | "series";
 
 export interface Library { id: number; name: string; type: LibraryType; rootPath: string }
 
-/** `progress` es la fracción vista (0–1) para la barra de la tarjeta; `watched` si está marcada como vista. */
-export interface MovieSummary { id: number; title: string; year: number | null; fileId: number; watched: boolean; progress: number; hasPoster: boolean }
-export interface SeriesSummary { id: number; title: string; seasons: number; episodes: number; watchedEpisodes: number; hasPoster: boolean }
+/** `progress` es la fracción vista (0–1) para la barra de la tarjeta; `watched` si está marcada como vista. `addedAt`: cuándo entró en el catálogo (ms). */
+export interface MovieSummary { id: number; title: string; year: number | null; fileId: number; watched: boolean; progress: number; hasPoster: boolean; addedAt: number }
+/** `startedEpisodes`: episodios vistos o empezados (incluye los vistos); `addedAt`: cuándo entró el último episodio (ms). */
+export interface SeriesSummary { id: number; title: string; seasons: number; episodes: number; watchedEpisodes: number; startedEpisodes: number; hasPoster: boolean; addedAt: number }
 
 export interface EpisodeItem { id: number; number: number; title: string | null; overview: string | null; fileId: number; watched: boolean; progress: number }
 export interface SeasonItem { id: number; number: number; episodes: EpisodeItem[] }
@@ -38,6 +39,10 @@ export interface MediaFileInfo {
   subtitle: string | null;
   seriesId: number | null;
   next: NextEpisode | null;
+  /** Episodio anterior de la serie (para «pista anterior» de las teclas multimedia). */
+  previous: NextEpisode | null;
+  /** URL de la carátula (de la película o de la serie), si se conoce. */
+  poster: string | null;
   relPath: string;
   sizeBytes: number;
   container: string | null;
@@ -135,6 +140,21 @@ export interface ContinueItem {
   positionS: number;
   durationS: number | null;
   /** URL de la carátula (de la película o de la serie), si se conoce. */
+  poster: string | null;
+}
+
+/** Una novedad del catálogo: una película, o una serie con episodios nuevos (agrupados en una sola entrada). */
+export interface RecentItem {
+  kind: "movie" | "series";
+  id: number;
+  title: string;
+  year: number | null;
+  /** Película: archivo a reproducir. Serie: null (se abre su ficha). */
+  fileId: number | null;
+  /** Serie: episodios que entraron en la última tanda (24 h). Película: 0. */
+  newEpisodes: number;
+  /** Cuándo conoció Nebula el archivo (ms desde 1970). */
+  addedAt: number;
   poster: string | null;
 }
 

@@ -5,7 +5,10 @@ import { LinkButton } from "../components/Button";
 import { PageHeading } from "../components/PageHeading";
 import { SearchBox } from "../components/SearchBox";
 import { TitleCard } from "../components/TitleCard";
-import { norm, plural } from "../lib/format";
+import { ViewControls } from "../components/ViewControls";
+import { SERIES_ORDERS, countByState, filterByState, filterByText, seriesState, sortSeries } from "../lib/catalogView";
+import { plural } from "../lib/format";
+import { useCatalogView } from "../lib/useCatalogView";
 import { usePageTitle } from "../lib/usePageTitle";
 import { useApi } from "../lib/useApi";
 
@@ -13,7 +16,10 @@ export default function Series() {
   usePageTitle("Series");
   const { data, error, loading, reload } = useApi<SeriesSummary[]>("/api/series");
   const [q, setQ] = useState("");
-  const list = useMemo(() => (data ?? []).filter((s) => norm(s.title).includes(norm(q))), [data, q]);
+  const { order, estado, setOrder, setEstado } = useCatalogView(SERIES_ORDERS.map((o) => o.value));
+  const searched = useMemo(() => filterByText(data ?? [], q), [data, q]);
+  const counts = useMemo(() => countByState(searched, seriesState), [searched]);
+  const list = useMemo(() => sortSeries(filterByState(searched, seriesState, estado), order), [searched, estado, order]);
 
   return (
     <>
@@ -29,9 +35,12 @@ export default function Series() {
       {data && data.length > 0 && (
         <>
           <SearchBox label="Buscar en series" value={q} onChange={setQ} />
-          <p role="status" className="sr-only">{q ? plural(list.length, "resultado", "resultados") : ""}</p>
+          <ViewControls estado={estado} onEstado={setEstado} counts={counts} orders={SERIES_ORDERS} order={order} onOrder={setOrder} />
+          <p role="status" className="sr-only">{q || estado !== "todas" ? plural(list.length, "resultado", "resultados") : ""}</p>
           {list.length === 0 ? (
-            <p className="py-8 text-meta text-muted">No hay ninguna serie que se llame así.</p>
+            <p className="py-8 text-meta text-muted">
+              {q ? "No hay ninguna serie que se llame así." : "No hay ninguna serie en este estado."}
+            </p>
           ) : (
             <ul className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {list.map((s) => (

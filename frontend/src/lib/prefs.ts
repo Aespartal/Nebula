@@ -15,6 +15,12 @@ function remove(key: string) {
 export const subtitlePref = { get: () => read("nebula.subtitleLang"), set: (v: string) => write("nebula.subtitleLang", v) };
 export const audioPref = { get: () => read("nebula.audioLang"), set: (v: string) => write("nebula.audioLang", v) };
 
+/** Pasar solo al siguiente episodio al acabar. Sí por defecto: solo se guarda el «no». */
+export const autoplayNextPref = {
+  get: () => read("nebula.autoplayNext") !== "0",
+  set: (on: boolean) => { if (on) remove("nebula.autoplayNext"); else write("nebula.autoplayNext", "0"); },
+};
+
 /** Desfase de subtítulos (en segundos) de cada pista de cada vídeo. Solo se guarda lo que no es 0, para no acumular claves. */
 const offsetKey = (fileId: number, idx: number) => `nebula.subOffset.${fileId}.${idx}`;
 export const subtitleOffsetPref = {

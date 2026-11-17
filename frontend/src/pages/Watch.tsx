@@ -1,15 +1,19 @@
-import { useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import type { MediaFileInfo, MediaStreamInfo, PlaybackDecision, SystemInfo } from "@nebula/shared";
+import type { MediaFileInfo, MediaStreamInfo, PlaybackDecision, SubtitleUploadResult, SystemInfo } from "@nebula/shared";
 import { Button, LinkButton } from "../components/Button";
 import { Icon } from "../components/Icon";
 import { Wordmark } from "../components/Layout";
 import { ErrorBox, Loading } from "../components/States";
 import { CastPanel } from "../components/CastPanel";
+import { NextUp } from "../components/NextUp";
+import { SubtitleUpload } from "../components/SubtitleUpload";
 import { VideoPlayer, describeReason } from "../components/VideoPlayer";
+import { shouldAutoplay } from "../lib/autoplay";
+import { useUser } from "../lib/auth";
 import { formatClock, formatDuration, formatSize, plural } from "../lib/format";
 import { languageName, normalizeLang } from "../lib/lang";
-import { audioPref, subtitleOffsetPref, subtitlePref } from "../lib/prefs";
+import { audioPref, autoplayNextPref, subtitleOffsetPref, subtitlePref } from "../lib/prefs";
 import { OFFSET_STEP_S, clampOffset, formatOffset } from "../lib/subtitleOffset";
 import { pickAudio, pickSubtitle, subtitleLabel, textSubtitles } from "../lib/tracks";
 import { useFocusWhen } from "../lib/useFocusWhen";
@@ -41,14 +45,15 @@ function WatchView({ id }: { id: string }) {
       <main id="contenido">
         {loading && <Loading />}
         {error && <ErrorBox message={error} onRetry={reload} />}
-        {info && <WatchContent info={info} />}
+        {info && <WatchContent info={info} onReload={reload} />}
       </main>
     </div>
   );
 }
 
-function WatchContent({ info }: { info: MediaFileInfo }) {
+function WatchContent({ info, onReload }: { info: MediaFileInfo; onReload: () => void }) {
   const id = String(info.id);
+  const isAdmin = useUser().role === "admin";
   const [decision, setDecision] = useState<PlaybackDecision | null>(null);
   const [forceTranscode, setForceTranscode] = useState(false);
   const [fellBack, setFellBack] = useState<"direct" | "remux" | null>(null);
@@ -68,6 +73,21 @@ function WatchContent({ info }: { info: MediaFileInfo }) {
   }
   const nextRef = useRef<HTMLAnchorElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  // Siguiente episodio: al acabar aparece el aviso (con cuenta atrás si procede). Volver a dar al play lo descarta.
+  const [upNext, setUpNext] = useState<{ auto: boolean } | null>(null);
+  const [autoplay, setAutoplay] = useState(() => autoplayNextPref.get());
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const dismiss = () => setUpNext(null);
+    v.addEventListener("play", dismiss);
+    return () => v.removeEventListener("play", dismiss);
+  }, []);
+  // Un subtítulo recién subido se activa en cuanto llega con los datos recargados del archivo.
+  const [pendingSub, setPendingSub] = useState<number | null>(null);
+  useEffect(() => {
+    if (pendingSub !== null && tracks.some((t) => t.idx === pendingSub)) { chooseSubtitle(pendingSub); setPendingSub(null); }
+  }, [tracks, pendingSub]);
   const [startedOver, setStartedOver] = useState(false);
   const [watched, setWatched] = useState<boolean | null>(null);
   const h1 = useRef<HTMLHeadingElement>(null);
@@ -112,11 +132,18 @@ function WatchContent({ info }: { info: MediaFileInfo }) {
         forceTranscode={forceTranscode} setForceTranscode={setForceTranscode}
         onDecision={setDecision}
         onDirectFailed={setFellBack}
-        onEnded={() => nextRef.current?.focus()}
+        onEnded={() => {
+          if (!info.next) return;
+          setUpNext({ auto: shouldAutoplay({ enabled: autoplayNextPref.get(), hasNext: true, fullscreen: !!document.fullscreenElement }) });
+        }}
         startAt={resumeAt} videoRef={videoRef}
         subtitles={tracks} subtitleIdx={subtitleIdx}
         onSubtitleState={setSubState} onSubtitleChange={chooseSubtitle} subtitleOffset={subtitleOffset}
       />
+      {upNext && info.next && (
+        <NextUp label={info.next.label} auto={upNext.auto} onGo={() => navigate(`/ver/${info.next!.fileId}`)}
+          onCancel={() => { setUpNext(null); nextRef.current?.focus(); }} />
+      )}
       {system.data?.castAvailable && <CastPanel fileId={info.id} title={info.title} audioIdx={audioIdx} videoRef={videoRef} />}
 
       <div className="mt-5">
@@ -150,11 +177,23 @@ function WatchContent({ info }: { info: MediaFileInfo }) {
         )}
       </div>
 
+      {info.next && (
+        <label className="mt-3 flex min-h-[var(--control-h)] max-w-2xl items-center gap-3 text-meta">
+          <input type="checkbox" checked={autoplay} className="size-5 accent-[var(--color-accent)]"
+            onChange={(e) => { setAutoplay(e.target.checked); autoplayNextPref.set(e.target.checked); }} />
+          Pasar solo al siguiente episodio al terminar
+        </label>
+      )}
+
       <div className="mt-6 grid max-w-2xl gap-5 sm:grid-cols-2">
         <AudioPicker streams={info.streams} value={audioIdx} onChange={chooseAudio} />
         <SubtitlePicker streams={info.streams} value={subtitleIdx} onChange={chooseSubtitle} state={subState}
           offset={subtitleOffset} onOffset={changeOffset} />
       </div>
+
+      {isAdmin && (
+        <SubtitleUpload fileId={info.id} onUploaded={(r: SubtitleUploadResult) => { setPendingSub(r.idx); onReload(); }} />
+      )}
 
       <details className="mt-8 border-t border-rule pt-3">
         <summary className="min-h-[var(--control-h)] py-2 font-bold">Detalles técnicos</summary>

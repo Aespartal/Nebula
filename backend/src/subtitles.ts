@@ -25,6 +25,22 @@ export function decodeSubtitleText(buf: Buffer): string {
   }
 }
 
+/** Un SRT de verdad tiene al menos una marca «00:01:02,500 --> 00:01:04,000». */
+const SRT_CUE = /\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}[ \t]*-->[ \t]*\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}/;
+/** Tope de lo que se acepta al subir un subtítulo a mano: un .srt largo ronda los 150 KB. */
+export const MAX_SUBTITLE_UPLOAD_BYTES = 2 * 1024 * 1024;
+
+/**
+ * Valida un .srt subido y lo devuelve normalizado a UTF-8 (sin BOM, con salto final), o null si no parece un SRT.
+ * Guardarlo siempre en UTF-8 evita que la ñ y los acentos se rompan según quién lo lea después.
+ */
+export function normalizeUploadedSrt(buf: Buffer): string | null {
+  if (buf.length === 0) return null;
+  const text = decodeSubtitleText(buf).replace(/^\uFEFF/, "");
+  if (text.includes("\u0000") || !SRT_CUE.test(text)) return null; // binario, imagen, o texto cualquiera
+  return text.endsWith("\n") ? text : `${text}\n`;
+}
+
 function runFfmpeg(ffmpegPath: string, args: string[], stdin: string | null, timeoutMs: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const p = spawn(ffmpegPath, args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });

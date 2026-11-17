@@ -146,6 +146,9 @@ export interface AuthStatus {
  */
 export interface AuthSession { id: string; current: boolean; createdAt: number; lastSeen: number; userAgent: string | null }
 
+/** Resultado de subir un subtítulo: la pista nueva ya está en el archivo. */
+export interface SubtitleUploadResult { idx: number; language: string; title: string }
+
 // --- Progreso (fase 4) ---
 
 export interface WatchProgress { positionS: number; durationS: number | null; watched: boolean }

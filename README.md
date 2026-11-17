@@ -37,6 +37,7 @@ Variables: `PORT`, `HOST` (por defecto `127.0.0.1`; `0.0.0.0` para la red local)
 - **Películas y Series**: filtra por estado (Todas · Pendientes · En curso · Vistas, con su recuento) y ordena por título, año (solo películas) o añadido recientemente. La elección va en la dirección (`?estado=vistas&orden=reciente`), así que se conserva al recargar y se puede enlazar. En una serie, «En curso» es que tiene algún episodio visto o empezado.
 - **Instalar como aplicación**: desde el menú de Chrome, Edge o Android («Instalar Nebula» o «Añadir a pantalla de inicio», según el navegador); en iPhone y iPad, Compartir → «Añadir a pantalla de inicio». Se abre sin barra de direcciones. Los navegadores solo la ofrecen por HTTPS (o en `localhost`), así que desde fuera de casa hace falta [publicarla con HTTPS](#publicar-en-internet). No funciona sin conexión.
 - **Teclas multimedia**: play/pausa, ±10 s y siguiente/anterior episodio desde el teclado, los auriculares o la pantalla de bloqueo del móvil, con el título y la carátula. «Anterior» reinicia el episodio si ya han pasado 5 s.
+- **Siguiente episodio automático**: al acabar un episodio aparece «Siguiente» con una cuenta atrás de 10 s; «Ver ahora» salta ya y «Cancelar» (o Escape) se queda donde estás. No arranca solo si el vídeo está a pantalla completa. Se desactiva con la casilla «Pasar solo al siguiente episodio al terminar» (se recuerda en ese navegador). Con «reducir movimiento» activado en el sistema no hay barra animada: solo el número.
 
 ## Reproducción y conversión
 
@@ -94,6 +95,7 @@ Nebula controla un qBittorrent instalado **en el mismo equipo** (decisiones y pl
 
 - Subtítulos de texto (SRT, ASS/SSA, mov_text, WebVTT), incrustados o en archivos externos junto al vídeo, se convierten a WebVTT al vuelo y se guardan en caché. Los de imagen (PGS, DVD) no se pueden mostrar en el navegador y aparecen desactivados.
 - En el reproductor eliges subtítulo y pista de audio; Nebula recuerda tu idioma preferido en ese navegador.
+- **Añadir subtítulos a mano** (solo administradores): bajo el reproductor, «Añadir subtítulos (.srt)». El archivo se guarda junto al vídeo como `Nombre.es.srt` (siempre en UTF-8, aunque el original esté en Windows-1252 o UTF-16) y se activa al momento. Nunca sustituye a un subtítulo que ya exista, y la carpeta de la biblioteca debe poder escribirse (si Nebula la monta en solo lectura, avisa).
 - **Sincronía**: si un subtítulo sale antes o después, ajústalo en pasos de 0,5 s (hasta ±60 s) con «−0,5 s» y «+0,5 s» bajo el selector. Se aplica al instante en el navegador, sin tocar el archivo, y se recuerda para ese vídeo y esa pista.
 
 ## Carátulas y sinopsis (TMDB)

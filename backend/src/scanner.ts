@@ -134,6 +134,13 @@ function syncExternalSubs(db: Db, st: Stmts, fileId: number, subs: Subs): boolea
   return true;
 }
 
+/** Vuelve a mirar los subtítulos externos de un archivo (p. ej. tras subir uno) sin esperar a un escaneo completo. */
+export async function refreshExternalSubs(db: Db, fileId: number): Promise<void> {
+  const row = db.prepare("SELECT path FROM media_files WHERE id=?").get(fileId) as { path: string } | undefined;
+  if (!row) return;
+  syncExternalSubs(db, createStatements(db), fileId, await findExternalSubs(row.path));
+}
+
 function cleanupOrphans(db: Db) {
   db.exec(`
     DELETE FROM movies WHERE id NOT IN (SELECT movie_id FROM media_files WHERE movie_id IS NOT NULL);

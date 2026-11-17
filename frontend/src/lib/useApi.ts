@@ -60,4 +60,17 @@ export async function sendJson<T = unknown>(method: "GET" | "POST" | "PUT" | "DE
   }
 }
 
+/** Sube un archivo tal cual (application/octet-stream): sin tocar su codificación. */
+export async function sendBytes<T = unknown>(path: string, body: ArrayBuffer): Promise<ApiResult<T>> {
+  try {
+    const r = await fetch(path, { method: "POST", headers: { "content-type": "application/octet-stream" }, body });
+    const json = await r.json().catch(() => ({}));
+    if (r.status === 401) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+    if (!r.ok) return { ok: false, code: json?.error ?? `http_${r.status}`, status: r.status, body: json };
+    return { ok: true, data: json as T };
+  } catch {
+    return { ok: false, code: "network" };
+  }
+}
+
 export const postJson = <T,>(path: string, body?: unknown) => sendJson<T>("POST", path, body);

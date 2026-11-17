@@ -120,6 +120,22 @@ Elige una opción; en las dos, **no abras el puerto de Nebula directamente**.
 
 Antes de exponerlo: contraseñas largas (mínimo 8, mejor una frase), solo las cuentas necesarias, y actualiza Node y FFmpeg.
 
+## Enviar a la TV (Chromecast)
+
+En la página de reproducción aparece **Enviar a la TV** (Chrome en Android o PC). Tu móvil hace de mando (pausa, ±10 s, parar) y la Chromecast pide el vídeo **directamente a Nebula por Internet**, así que funciona aunque estés en otra casa y otra wifi.
+
+**Qué necesita**
+1. Una dirección pública con HTTPS válido. Sin dominio y gratis: [Tailscale Funnel](https://tailscale.com/kb/1223/funnel). Instala Tailscale **solo en el PC**, actívalo con tu cuenta y ejecuta `tailscale funnel --bg 3000`; te da `https://nombre-del-pc.tu-red.ts.net`.
+2. En `.env`: `PUBLIC_URL=https://nombre-del-pc.tu-red.ts.net` y `TRUST_PROXY=1`. Reinicia Nebula. Sin `PUBLIC_URL` el botón no aparece.
+3. El PC encendido y con Nebula en marcha mientras se ve la película.
+
+**Cómo funciona y qué se expone**
+- La tele no tiene tu sesión. Nebula crea una conversión para esa película y una dirección con **permiso firmado que caduca a las 6 horas**; sirve solo esa conversión (lista y segmentos), con CORS. No da acceso a la biblioteca, a otras películas ni a la API.
+- Siempre se convierte a H.264/AAC en **720p máximo**, para que la tele lo reproduzca y el túnel no se sature. Con GPU NVIDIA va fluido; solo con CPU depende del equipo.
+- Al pulsar **Dejar de enviar** se libera la conversión. El progreso se guarda en tu cuenta cada 15 s.
+- Tailscale Funnel tiene límites de ancho de banda no publicados: si se corta o se pausa a menudo, prueba con otra hora.
+- No hay botón en iPhone/Safari (Google Cast solo existe en Chrome).
+
 ## Arrancar con el equipo
 
 - **Windows:** `deploy/windows/instalar-servicio.ps1` instala Nebula como servicio con [NSSM](https://nssm.cc) (arranca con Windows, rota el registro en `data/nebula.log`). Gestión día a día, actualizar y solución de problemas: [`docs/servicio-windows.md`](docs/servicio-windows.md).

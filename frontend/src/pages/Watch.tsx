@@ -1,10 +1,11 @@
 import { useId, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { MediaFileInfo, MediaStreamInfo, PlaybackDecision } from "@nebula/shared";
+import type { MediaFileInfo, MediaStreamInfo, PlaybackDecision, SystemInfo } from "@nebula/shared";
 import { Button, LinkButton } from "../components/Button";
 import { Icon } from "../components/Icon";
 import { Wordmark } from "../components/Layout";
 import { ErrorBox, Loading } from "../components/States";
+import { CastPanel } from "../components/CastPanel";
 import { VideoPlayer, describeReason } from "../components/VideoPlayer";
 import { formatClock, formatDuration, formatSize, plural } from "../lib/format";
 import { languageName, normalizeLang } from "../lib/lang";
@@ -59,6 +60,7 @@ function WatchContent({ info }: { info: MediaFileInfo }) {
   const [startedOver, setStartedOver] = useState(false);
   const [watched, setWatched] = useState<boolean | null>(null);
   const h1 = useRef<HTMLHeadingElement>(null);
+  const system = useApi<SystemInfo>("/api/system");
   useFocusWhen(h1, true);
 
   // Se retoma solo si había avanzado algo y aún no estaba casi al final.
@@ -97,6 +99,7 @@ function WatchContent({ info }: { info: MediaFileInfo }) {
         subtitles={tracks} subtitleIdx={subtitleIdx}
         onSubtitleState={setSubState} onSubtitleChange={chooseSubtitle}
       />
+      {system.data?.castAvailable && <CastPanel fileId={info.id} title={info.title} audioIdx={audioIdx} videoRef={videoRef} />}
 
       <div className="mt-5">
         {info.subtitle && <p className="font-bold text-muted">{info.subtitle}</p>}

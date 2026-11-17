@@ -14,6 +14,12 @@ export const config = {
   watchDebounceMs: Number(process.env.WATCH_DEBOUNCE_MS ?? 10_000),
   // Escaneo periódico de respaldo (útil con carpetas de red). 0 = desactivado.
   scanIntervalMinutes: Number(process.env.SCAN_INTERVAL_MINUTES ?? 0),
+  // Dirección pública https de Nebula (p. ej. la de Tailscale Funnel). Solo para enviar a una tele (Cast).
+  publicUrl: (() => {
+    const v = process.env.PUBLIC_URL?.trim().replace(/\/+$/, "");
+    if (!v) return null;
+    try { const u = new URL(v); return u.protocol === "https:" && !u.search && !u.hash && (u.pathname === "/" || u.pathname === "") ? u.origin : null; } catch { return null; }
+  })(),
   trustProxy: process.env.TRUST_PROXY === "1",
   dataDir: path.resolve(process.env.DATA_DIR ?? "./data"),
   ffprobePath: process.env.FFPROBE_PATH ?? "ffprobe",

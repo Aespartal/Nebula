@@ -98,6 +98,16 @@ export interface SystemInfo {
   profiles: string[];
   maxSessions: number;
   activeSessions: number;
+  /** ¿Está configurada PUBLIC_URL? Sin ella no se puede enviar a una tele fuera de la red local. */
+  castAvailable: boolean;
+}
+
+/** Sesión para enviar a una tele: dirección pública con permiso firmado. */
+export interface CastSession {
+  url: string;
+  sessionId: string;
+  durationS: number;
+  expiresAt: number;
 }
 
 // --- Cuentas (fase 4) ---

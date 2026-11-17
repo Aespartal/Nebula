@@ -10,10 +10,10 @@ import { getStreams } from "./media-queries.js";
 
 const SEG_RE = /^seg_\d{5}\.ts$/;
 
-export function registerPlaybackRoutes(app: FastifyInstance, db: Db, hls: HlsSessions | null, enc: EncoderInfo, maxSessions: number) {
+export function registerPlaybackRoutes(app: FastifyInstance, db: Db, hls: HlsSessions | null, enc: EncoderInfo, maxSessions: number, castAvailable = false) {
   app.get("/api/system", async (): Promise<SystemInfo> => ({
     ffmpeg: enc.ffmpegVersion, nvenc: enc.nvenc, profiles: enc.profiles,
-    maxSessions, activeSessions: hls?.activeCount ?? 0,
+    maxSessions, activeSessions: hls?.activeCount ?? 0, castAvailable,
   }));
 
   app.post<{ Params: { id: string }; Body: PlaybackRequest }>(

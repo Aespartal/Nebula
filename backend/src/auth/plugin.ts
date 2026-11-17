@@ -52,6 +52,8 @@ export async function registerAuth(app: FastifyInstance, db: Db) {
       if (user) { req.user = user; req.sessionToken = token; }
       else clearSessionCookie(reply); // cookie caducada o revocada
     }
+    // La tele (Chromecast) no tiene la sesión: sus rutas llevan un permiso firmado y solo sirven una conversión concreta.
+    if (!req.user && (req.method === "GET" || req.method === "OPTIONS") && url.startsWith("/api/cast/t/")) return;
     if (!req.user && !PUBLIC.has(url)) return reply.code(401).send({ error: "unauthorized" });
   });
 }

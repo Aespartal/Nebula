@@ -11,6 +11,7 @@ import { registerAuth } from "./auth/plugin.js";
 import { registerAuthRoutes } from "./auth/routes.js";
 import { SubtitleCache } from "./subtitles.js";
 import { registerSubtitleRoutes } from "./subtitles-routes.js";
+import { registerCastRoutes } from "./cast.js";
 import { registerPlaybackRoutes } from "./playback-routes.js";
 import { MetadataService } from "./metadata/service.js";
 import { registerMetadataRoutes } from "./metadata/routes.js";
@@ -43,7 +44,7 @@ bootstrapLibrary("Series", "series", config.seriesDir);
 if (!!config.tlsCert !== !!config.tlsKey) throw new Error("Para HTTPS indica TLS_CERT y TLS_KEY a la vez.");
 const https = config.tlsCert && config.tlsKey ? { cert: readFileSync(config.tlsCert), key: readFileSync(config.tlsKey) } : undefined;
 const app = Fastify({ logger: true, trustProxy: config.trustProxy, ...(https ? { https } : {}) }) as unknown as FastifyInstance;
-registerSecurityHeaders(app);
+registerSecurityHeaders(app, { cast: !!config.publicUrl });
 const exposed = !["127.0.0.1", "localhost", "::1"].includes(config.host);
 if (exposed && !https && !config.trustProxy) {
   app.log.warn("Nebula escucha en la red sin HTTPS: las contraseñas y la sesión viajan sin cifrar. Usa TLS_CERT/TLS_KEY o un proxy inverso con TRUST_PROXY=1 (ver README).");
@@ -73,7 +74,8 @@ if (encoders.profiles.length > 0) {
 } else {
   app.log.warn("FFmpeg no está disponible: solo se podrá reproducir en directo lo que el navegador admita. Ejecuta `npm run doctor`.");
 }
-registerPlaybackRoutes(app, db, hls, encoders, config.maxTranscodeSessions);
+registerPlaybackRoutes(app, db, hls, encoders, config.maxTranscodeSessions, !!config.publicUrl);
+registerCastRoutes(app, db, hls, { publicUrl: config.publicUrl });
 registerSystemRoutes(app, db, hls, encoders, config.maxTranscodeSessions);
 registerSubtitleRoutes(app, db, new SubtitleCache(path.join(config.dataDir, "subtitles"), config.ffmpegPath));
 
